@@ -44,3 +44,6 @@ Settings and the generated `wallpaper.bmp` are stored in `%LOCALAPPDATA%\BGInfoP
 4. Apply and verify the wallpaper, then reopen to verify saved selection and refreshed values.
 5. Try a missing file and malformed JSON: errors should appear while local fields remain usable. Restore the previous wallpaper through Windows Settings.
 
+## Copyright
+
+No infringement intended on BGInfo (available here: https://learn.microsoft.com/en-us/sysinternals/downloads/bginfo). Hi, Mark!
