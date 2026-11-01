@@ -11,8 +11,11 @@ BGInfoPlus is a portable Windows application. Run `BGInfoPlus.exe` directly; ins
 3. Use a helper action to choose system data. BGInfoPlus creates a named placeholder, such as `{Hostname}`, and inserts it at the cursor. Placeholders can be moved and formatted like normal text.
 4. Select **Preview** to resolve the current values and inspect the generated wallpaper without changing the desktop.
 5. Select **Export image** to save a static PNG, BMP, or JPEG, or select **Apply wallpaper** to save the configuration and update the current user's wallpaper.
+6. Select **Deploy for all users…** from an installed or portable build to save the current design as a protected machine-wide template and register it for every interactive user at logon.
 
 Enable **Always apply at login** before applying the wallpaper if it should be regenerated whenever the current user signs in. BGInfoPlus registers the current executable under the user's Windows `Run` key. At login it starts with `--apply`, reads the saved configuration, refreshes the wallpaper without opening the editor, and exits. Clear the checkbox and select **Apply wallpaper** again to remove that login entry.
+
+**Deploy for all users…** is a separate machine-wide mode intended for shared systems and prepared images. It prompts for elevation, writes `%ProgramData%\BGInfoPlus\config.json` with read-only access for ordinary users, disables the current user's duplicate `Run` entry, and registers an all-users Task Scheduler task. Ten seconds after each interactive logon, BGInfoPlus reads the shared template, resolves values in that user's context, writes the bitmap under that user's `%LOCALAPPDATA%`, applies it, and exits. See [Preparing a reference image](docs/reference-image.md).
 
 ### Data helpers
 
@@ -30,6 +33,7 @@ The helper actions provide:
 ### Saved files and troubleshooting
 
 - Configuration is stored for the current user under `HKCU\Software\BGInfoPlus`.
+- An all-users deployment stores its protected shared template at `%ProgramData%\BGInfoPlus\config.json`.
 - The generated wallpaper is `%LOCALAPPDATA%\BGInfoPlus\wallpaper.bmp`.
 - Automatic-apply diagnostics are written to `%LOCALAPPDATA%\BGInfoPlus\BGInfoPlus.log`.
 - Existing Windows wallpaper-fit settings and administrator policy still control how Windows displays or permits the generated image.
@@ -87,7 +91,7 @@ The generated wallpaper is stored at `%LOCALAPPDATA%\BGInfoPlus\wallpaper.bmp`. 
 Versioned release artifacts are produced by one script. The version must match the version in `BGInfoPlus.csproj`:
 
 ```powershell
-./tools/Build-Release.ps1 -Version 1.0.2
+./tools/Build-Release.ps1 -Version 1.0.3
 ```
 
 The script runs the tests, publishes the self-contained `win-x64` executable, verifies its Windows file version, and creates these files under the matching version directory in `artifacts/release`:
@@ -96,11 +100,11 @@ The script runs the tests, publishes the self-contained `win-x64` executable, ve
 - Azure VM Application ZIP and its command manifest
 - SHA-256 checksums
 
-Pushing a version tag such as `v1.0.2` runs `.github/workflows/release.yml`, repeats the verified build on GitHub Actions, and creates the GitHub release with those artifacts.
+Pushing a version tag such as `v1.0.3` runs `.github/workflows/release.yml`, repeats the verified build on GitHub Actions, and creates the GitHub release with those artifacts.
 
 ## Azure Compute Gallery VM Application
 
-The Azure package installs BGInfoPlus under `%ProgramFiles%\BGInfoPlus`, creates an all-users Start Menu shortcut, and registers an uninstall entry. Users run the editor once to configure their own wallpaper and can then enable **Always apply at login**. Removal preserves each user's saved layout and generated wallpaper.
+The Azure package installs BGInfoPlus and its all-users deployment helper under `%ProgramFiles%\BGInfoPlus`, creates an all-users Start Menu shortcut, and registers an uninstall entry. It does not invent or overwrite a shared design during installation. Configure the reference VM, select **Deploy for all users…**, verify the scheduled task, and then run Sysprep. Removal deletes the machine-wide task and shared template while preserving each user's saved layout and generated wallpaper.
 
 Run the interactive publisher after building the release package:
 

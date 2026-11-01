@@ -14,6 +14,7 @@ internal static class AppLimits
     public const int MaxDocumentCharacters = 1024 * 1024;
     public const int MaxPlaceholders = 128;
     public const int MaxPlaceholderJsonCharacters = 512 * 1024;
+    public const int MaxConfigurationFileBytes = 4 * 1024 * 1024;
     public const int MaxResolvedValueCharacters = 4096;
     public const int MaxArgumentCharacters = 4096;
     public const int MaxLabelCharacters = 256;
@@ -37,12 +38,15 @@ internal static class AppLimits
 
     public static void Validate(AppConfiguration configuration)
     {
+        if (configuration is null) throw new InvalidDataException("The configuration is missing.");
         if (!IsValidResolution(configuration.ImageWidth, configuration.ImageHeight))
             throw new InvalidDataException($"Image dimensions must be between {MinImageWidth}×{MinImageHeight} and {MaxImageWidth}×{MaxImageHeight}.");
-        if (configuration.Document.Length > MaxDocumentCharacters)
+        if (configuration.Document is null || configuration.Document.Length > MaxDocumentCharacters)
             throw new InvalidDataException("The rich-text document is too large.");
-        if (configuration.Placeholders.Length > MaxPlaceholders)
+        if (configuration.Placeholders is null || configuration.Placeholders.Length > MaxPlaceholders)
             throw new InvalidDataException($"No more than {MaxPlaceholders} placeholders are allowed.");
+        if (configuration.BackgroundColor is null || configuration.BackgroundColor.Length > 32)
+            throw new InvalidDataException("The wallpaper color is invalid.");
         foreach (var placeholder in configuration.Placeholders)
         {
             if (placeholder is null) throw new InvalidDataException("A placeholder definition is missing.");

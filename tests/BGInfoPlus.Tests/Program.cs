@@ -102,6 +102,25 @@ try
 catch (InvalidDataException) { invalidConfigurationRejected = true; }
 Check(invalidConfigurationRejected, "Invalid placeholder names rejected");
 
+var configurationDirectory = Path.Combine(Path.GetTempPath(), "BGInfoPlus.ConfigTests", Guid.NewGuid().ToString("N"));
+var configurationPath = Path.Combine(configurationDirectory, "config.json");
+var sharedConfiguration = new AppConfiguration("<FlowDocument />", [new PlaceholderDefinition("Hostname", "Hostname", "Networking", "Hostname")], true, 1920, 1080, "#102030");
+ConfigurationFileStore.Save(configurationPath, sharedConfiguration);
+var loadedSharedConfiguration = ConfigurationFileStore.Load(configurationPath);
+Check(loadedSharedConfiguration.Document == sharedConfiguration.Document, "Shared configuration document round-trips");
+Check(loadedSharedConfiguration.Placeholders.SequenceEqual(sharedConfiguration.Placeholders), "Shared configuration placeholders round-trip");
+Check(!loadedSharedConfiguration.RunAtSignIn, "Shared configuration never enables a per-user Run entry");
+File.WriteAllText(configurationPath, "{\"Document\":null,\"Placeholders\":[],\"ImageWidth\":1920,\"ImageHeight\":1080,\"BackgroundColor\":\"#000000\"}");
+var malformedConfigurationRejected = false;
+try { ConfigurationFileStore.Load(configurationPath); } catch (InvalidDataException) { malformedConfigurationRejected = true; }
+Check(malformedConfigurationRejected, "Malformed shared configuration is rejected before rendering");
+using (var oversized = new FileStream(configurationPath, FileMode.Create, FileAccess.Write))
+    oversized.SetLength(AppLimits.MaxConfigurationFileBytes + 1L);
+var oversizedConfigurationRejected = false;
+try { ConfigurationFileStore.Load(configurationPath); } catch (InvalidDataException) { oversizedConfigurationRejected = true; }
+Check(oversizedConfigurationRejected, "Oversized shared configuration is rejected before parsing");
+Directory.Delete(configurationDirectory, true);
+
 var atomicDirectory = Path.Combine(Path.GetTempPath(), "BGInfoPlus.Tests", Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(atomicDirectory);
 var atomicPath = Path.Combine(atomicDirectory, "image.bin");

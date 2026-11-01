@@ -39,6 +39,7 @@ catch {
 
 $installedRemoveScript = Join-Path $installDirectory 'Remove-BGInfoPlus.ps1'
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Remove-BGInfoPlus.ps1') -Destination $installedRemoveScript -Force
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Deploy-BGInfoPlusForAllUsers.ps1') -Destination (Join-Path $installDirectory 'Deploy-BGInfoPlusForAllUsers.ps1') -Force
 
 $shortcutPath = Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\BGInfoPlus.lnk'
 $shell = New-Object -ComObject WScript.Shell

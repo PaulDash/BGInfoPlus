@@ -38,11 +38,13 @@ Copy-Item -LiteralPath $publishedExe -Destination $standaloneExe
 $portableStage = Join-Path $releaseRoot 'portable'
 [IO.Directory]::CreateDirectory($portableStage) | Out-Null
 Copy-Item -LiteralPath $publishedExe -Destination (Join-Path $portableStage 'BGInfoPlus.exe')
+Copy-Item -LiteralPath (Join-Path $repositoryRoot 'packaging\azure-vm-application\Deploy-BGInfoPlusForAllUsers.ps1') -Destination $portableStage
 Set-Content -LiteralPath (Join-Path $portableStage 'README.txt') -Encoding UTF8 -Value @"
 BGInfoPlus $Version
 
 Run BGInfoPlus.exe to configure, preview, export, and apply the wallpaper.
 No separate .NET runtime is required. Configuration is stored for the current user.
+Use "Deploy for all users" in the editor to create a protected shared template and logon task.
 Documentation: https://github.com/PaulDash/BGInfoPlus
 "@
 $portableZip = Join-Path $releaseRoot "BGInfoPlus-$Version-win-x64.zip"
@@ -53,6 +55,7 @@ $vmStage = Join-Path $releaseRoot 'azure-vmapp'
 Copy-Item -LiteralPath $publishedExe -Destination (Join-Path $vmStage 'BGInfoPlus.exe')
 Copy-Item -LiteralPath (Join-Path $repositoryRoot 'packaging\azure-vm-application\Install-BGInfoPlus.ps1') -Destination $vmStage
 Copy-Item -LiteralPath (Join-Path $repositoryRoot 'packaging\azure-vm-application\Remove-BGInfoPlus.ps1') -Destination $vmStage
+Copy-Item -LiteralPath (Join-Path $repositoryRoot 'packaging\azure-vm-application\Deploy-BGInfoPlusForAllUsers.ps1') -Destination $vmStage
 $vmPackageName = "BGInfoPlus-$Version-azure-vmapp.zip"
 $vmPackage = Join-Path $releaseRoot $vmPackageName
 Compress-Archive -Path (Join-Path $vmStage '*') -DestinationPath $vmPackage -CompressionLevel Optimal

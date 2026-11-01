@@ -8,6 +8,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using System.Windows.Interop;
+using System.Diagnostics;
 using BGInfoPlus.Core;
 using Microsoft.Win32;
 
@@ -173,7 +174,7 @@ internal sealed class Editor : Window
     private UIElement BuildActions()
     {
         var bar = new Grid { HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 16, 0, 0) };
-        for (var i = 0; i < 4; i++) bar.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        for (var i = 0; i < 5; i++) bar.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         bar.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); bar.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         resolutions.ToolTip = "Wallpaper output resolution";
         resolutions.VerticalAlignment = VerticalAlignment.Top; Grid.SetColumn(resolutions, 0); bar.Children.Add(resolutions);
@@ -183,6 +184,8 @@ internal sealed class Editor : Window
         Grid.SetColumn(apply, 2); bar.Children.Add(apply);
         var export = new Button { Content = "Export image…", Height = 34, MinWidth = 112, Margin = new Thickness(8, 0, 0, 0) }; export.Click += async (_, _) => await ExportAsync();
         Grid.SetColumn(export, 3); bar.Children.Add(export);
+        var deploy = new Button { Content = "Deploy for all users…", Height = 34, MinWidth = 156, Margin = new Thickness(8, 0, 0, 0), ToolTip = "Save this design as the machine-wide template and apply it whenever any user signs in" };
+        deploy.Click += async (_, _) => await DeployForAllUsersAsync(); Grid.SetColumn(deploy, 4); bar.Children.Add(deploy);
         Grid.SetColumn(runAtSignIn, 2); Grid.SetRow(runAtSignIn, 1); bar.Children.Add(runAtSignIn);
         return bar;
     }
@@ -287,6 +290,37 @@ internal sealed class Editor : Window
             status.Text = $"Image exported to {dialog.FileName}";
         }
         catch (Exception e) { status.Text = "Image could not be exported: " + e.Message; }
+    }
+
+    private async Task DeployForAllUsersAsync()
+    {
+        try
+        {
+            var script = System.IO.Path.Combine(AppContext.BaseDirectory, "Deploy-BGInfoPlusForAllUsers.ps1");
+            if (!File.Exists(script))
+                throw new FileNotFoundException("The all-users deployment helper is not installed. Use the portable ZIP or Azure VM Application package instead of the standalone executable.", script);
+            var configuration = CurrentConfiguration() with { RunAtSignIn = false };
+            ConfigurationStore.Save(configuration);
+            runAtSignIn.IsChecked = false;
+            var start = new ProcessStartInfo
+            {
+                FileName = "powershell.exe", UseShellExecute = true, Verb = "runas",
+                WindowStyle = ProcessWindowStyle.Normal
+            };
+            start.ArgumentList.Add("-NoLogo"); start.ArgumentList.Add("-NoProfile");
+            start.ArgumentList.Add("-ExecutionPolicy"); start.ArgumentList.Add("Bypass");
+            start.ArgumentList.Add("-File"); start.ArgumentList.Add(script);
+            status.Text = "Waiting for the elevated all-users deployment…";
+            using var process = Process.Start(start) ?? throw new InvalidOperationException("The deployment helper could not be started.");
+            await process.WaitForExitAsync();
+            if (process.ExitCode != 0) throw new InvalidOperationException($"The deployment helper exited with code {process.ExitCode}. See its PowerShell window for details.");
+            status.Text = "Machine-wide configuration deployed. BGInfoPlus will apply it for every user at logon.";
+        }
+        catch (System.ComponentModel.Win32Exception e) when (e.NativeErrorCode == 1223)
+        {
+            status.Text = "All-users deployment was cancelled.";
+        }
+        catch (Exception e) { status.Text = "All-users deployment failed: " + e.Message; }
     }
 
     private void LoadConfiguration()

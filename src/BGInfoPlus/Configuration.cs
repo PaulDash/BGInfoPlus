@@ -69,3 +69,35 @@ internal static class ConfigurationStore
         else run.DeleteValue("BGInfoPlus", false);
     }
 }
+
+internal static class ConfigurationFileStore
+{
+    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
+
+    public static AppConfiguration Load(string path)
+    {
+        var fullPath = Path.GetFullPath(path);
+        var info = new FileInfo(fullPath);
+        if (!info.Exists) throw new FileNotFoundException("The shared BGInfoPlus configuration was not found.", fullPath);
+        if (info.Length > AppLimits.MaxConfigurationFileBytes)
+            throw new InvalidDataException("The shared BGInfoPlus configuration is too large.");
+        using var stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read,
+            64 * 1024, FileOptions.SequentialScan);
+        var configuration = JsonSerializer.Deserialize<AppConfiguration>(stream, JsonOptions)
+            ?? throw new InvalidDataException("The shared BGInfoPlus configuration is empty.");
+        AppLimits.Validate(configuration);
+        return configuration;
+    }
+
+    public static void Save(string path, AppConfiguration configuration)
+    {
+        configuration = configuration with { RunAtSignIn = false };
+        AppLimits.Validate(configuration);
+        AtomicFile.Write(path, stream =>
+        {
+            JsonSerializer.Serialize(stream, configuration, JsonOptions);
+            if (stream.Length > AppLimits.MaxConfigurationFileBytes)
+                throw new InvalidDataException("The shared BGInfoPlus configuration is too large.");
+        });
+    }
+}

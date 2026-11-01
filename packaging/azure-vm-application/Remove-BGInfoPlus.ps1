@@ -11,6 +11,9 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
 $installDirectory = [IO.Path]::GetFullPath((Join-Path $env:ProgramFiles 'BGInfoPlus'))
 $destinationExe = Join-Path $installDirectory 'BGInfoPlus.exe'
 
+Unregister-ScheduledTask -TaskName 'BGInfoPlus - Apply wallpaper at logon' -Confirm:$false -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath (Join-Path $env:ProgramData 'BGInfoPlus\config.json') -Force -ErrorAction SilentlyContinue
+
 Get-Process -Name BGInfoPlus -ErrorAction SilentlyContinue | ForEach-Object {
     try {
         if ([IO.Path]::GetFullPath($_.MainModule.FileName) -eq $destinationExe) { Stop-Process -Id $_.Id -Force }
@@ -29,7 +32,7 @@ Get-ChildItem -Path Registry::HKEY_USERS -ErrorAction SilentlyContinue |
         Remove-ItemProperty -LiteralPath $runKey -Name BGInfoPlus -ErrorAction SilentlyContinue
     }
 
-foreach ($fileName in @('BGInfoPlus.exe', 'BGInfoPlus.exe.new', 'BGInfoPlus.exe.previous', 'Remove-BGInfoPlus.ps1')) {
+foreach ($fileName in @('BGInfoPlus.exe', 'BGInfoPlus.exe.new', 'BGInfoPlus.exe.previous', 'Remove-BGInfoPlus.ps1', 'Deploy-BGInfoPlusForAllUsers.ps1')) {
     Remove-Item -LiteralPath (Join-Path $installDirectory $fileName) -Force -ErrorAction SilentlyContinue
 }
 Remove-Item -LiteralPath $installDirectory -Force -ErrorAction SilentlyContinue
