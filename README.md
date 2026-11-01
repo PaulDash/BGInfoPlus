@@ -87,38 +87,35 @@ The generated wallpaper is stored at `%LOCALAPPDATA%\BGInfoPlus\wallpaper.bmp`. 
 Versioned release artifacts are produced by one script. The version must match the version in `BGInfoPlus.csproj`:
 
 ```powershell
-./tools/Build-Release.ps1 -Version 1.0.2
+./tools/Build-Release.ps1 -Version 1.0.3
 ```
 
-The script runs the tests, publishes the self-contained `win-x64` executable, verifies its Windows file version, and creates these files under `artifacts/release/v1.0.2`:
+The script runs the tests, publishes the self-contained `win-x64` executable, verifies its Windows file version, and creates these files under the matching version directory in `artifacts/release`:
 
 - Standalone executable and portable ZIP
 - Azure VM Application ZIP and its command manifest
 - SHA-256 checksums
 
-Pushing a version tag such as `v1.0.2` runs `.github/workflows/release.yml`, repeats the verified build on GitHub Actions, and creates the GitHub release with those artifacts.
+Pushing a version tag such as `v1.0.3` runs `.github/workflows/release.yml`, repeats the verified build on GitHub Actions, and creates the GitHub release with those artifacts.
 
 ## Azure Compute Gallery VM Application
 
 The Azure package installs BGInfoPlus under `%ProgramFiles%\BGInfoPlus`, creates an all-users Start Menu shortcut, and registers an uninstall entry. Users run the editor once to configure their own wallpaper and can then enable **Always apply at login**. Removal preserves each user's saved layout and generated wallpaper.
 
-Build the release package first, then publish it to a Compute Gallery. The following example creates the gallery and application definition when they do not already exist, uploads the package as a page blob, and creates version `1.0.2`:
+Run the interactive publisher after building the release package:
 
 ```powershell
-./tools/Publish-AzureVmApplication.ps1 `
-  -ResourceGroupName 'my-gallery-rg' `
-  -GalleryName 'myGallery' `
-  -Location 'westeurope' `
-  -TargetRegions 'westeurope','northeurope' `
-  -StorageAccountName 'mystorageaccount'
+./tools/Publish-AzureVmApplication.ps1
 ```
 
-The signed-in identity needs access to the resource group and `Storage Blob Data Contributor` on the storage account. The convenience upload path uses a seven-day, read-only user-delegation SAS for gallery ingestion. For stronger security, attach a user-assigned managed identity to the gallery, grant it access to the package blob, and pass the plain blob URL with `-PackageUri` instead. See Microsoft's documentation for [creating and deploying VM Applications](https://learn.microsoft.com/azure/virtual-machines/vm-applications-how-to) and [publishing with managed identity](https://learn.microsoft.com/azure/virtual-machines/vm-applications-publish-with-managed-identity).
+The wizard discovers subscriptions, resource groups, galleries, storage accounts, and regions at runtime. It guides you through selecting or creating resources, choosing SAS or managed-identity ingestion, reviewing the plan, and confirming before any Azure mutation. It does not write subscription IDs, resource names, URLs, SAS values, or prompt answers to the repository or a settings file.
+
+The signed-in identity needs access to the chosen resource group. The assisted upload path also requires `Storage Blob Data Contributor` on the storage account and uses a seven-day, read-only user-delegation SAS for gallery ingestion. For stronger security, preconfigure a user-assigned managed identity on the gallery and choose the plain blob URL option. See Microsoft's documentation for [creating and deploying VM Applications](https://learn.microsoft.com/azure/virtual-machines/vm-applications-how-to) and [publishing with managed identity](https://learn.microsoft.com/azure/virtual-machines/vm-applications-publish-with-managed-identity).
 
 Deploy the replicated application version to a VM with failure propagation enabled:
 
 ```powershell
-$versionId = '/subscriptions/<subscription-id>/resourceGroups/<gallery-rg>/providers/Microsoft.Compute/galleries/<gallery>/applications/BGInfoPlus/versions/1.0.2'
+$versionId = '/subscriptions/<subscription-id>/resourceGroups/<gallery-rg>/providers/Microsoft.Compute/galleries/<gallery>/applications/BGInfoPlus/versions/<version>'
 az vm application set `
   --resource-group '<vm-resource-group>' `
   --name '<vm-name>' `

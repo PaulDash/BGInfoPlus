@@ -11,7 +11,9 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
 $sourceExe = Join-Path $PSScriptRoot 'BGInfoPlus.exe'
 if (-not (Test-Path -LiteralPath $sourceExe -PathType Leaf)) { throw "Package is missing $sourceExe." }
 $fileVersion = (Get-Item -LiteralPath $sourceExe).VersionInfo.FileVersion
-if ($fileVersion -ne '1.0.2.0') { throw "Expected BGInfoPlus 1.0.2.0, found $fileVersion." }
+$versionParts = $fileVersion.Split('.')
+if ($versionParts.Count -lt 3) { throw "BGInfoPlus has an invalid file version: $fileVersion." }
+$productVersion = $versionParts[0..2] -join '.'
 
 $installDirectory = Join-Path $env:ProgramFiles 'BGInfoPlus'
 $destinationExe = Join-Path $installDirectory 'BGInfoPlus.exe'
@@ -51,7 +53,7 @@ $shortcut.Save()
 $uninstallKey = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\BGInfoPlus'
 [void](New-Item -Path $uninstallKey -Force)
 Set-ItemProperty -Path $uninstallKey -Name DisplayName -Value 'BGInfoPlus'
-Set-ItemProperty -Path $uninstallKey -Name DisplayVersion -Value '1.0.2'
+Set-ItemProperty -Path $uninstallKey -Name DisplayVersion -Value $productVersion
 Set-ItemProperty -Path $uninstallKey -Name Publisher -Value 'Paul Dash'
 Set-ItemProperty -Path $uninstallKey -Name DisplayIcon -Value $destinationExe
 Set-ItemProperty -Path $uninstallKey -Name InstallLocation -Value $installDirectory
@@ -59,4 +61,4 @@ Set-ItemProperty -Path $uninstallKey -Name UninstallString -Value "powershell.ex
 New-ItemProperty -Path $uninstallKey -Name NoModify -Value 1 -PropertyType DWord -Force | Out-Null
 New-ItemProperty -Path $uninstallKey -Name NoRepair -Value 1 -PropertyType DWord -Force | Out-Null
 
-Write-Host "BGInfoPlus 1.0.2 installed at $destinationExe"
+Write-Host "BGInfoPlus $productVersion installed at $destinationExe"
