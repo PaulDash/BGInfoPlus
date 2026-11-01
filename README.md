@@ -87,7 +87,7 @@ The generated wallpaper is stored at `%LOCALAPPDATA%\BGInfoPlus\wallpaper.bmp`. 
 Versioned release artifacts are produced by one script. The version must match the version in `BGInfoPlus.csproj`:
 
 ```powershell
-./tools/Build-Release.ps1 -Version 1.0.3
+./tools/Build-Release.ps1 -Version 1.0.2
 ```
 
 The script runs the tests, publishes the self-contained `win-x64` executable, verifies its Windows file version, and creates these files under the matching version directory in `artifacts/release`:
@@ -96,7 +96,7 @@ The script runs the tests, publishes the self-contained `win-x64` executable, ve
 - Azure VM Application ZIP and its command manifest
 - SHA-256 checksums
 
-Pushing a version tag such as `v1.0.3` runs `.github/workflows/release.yml`, repeats the verified build on GitHub Actions, and creates the GitHub release with those artifacts.
+Pushing a version tag such as `v1.0.2` runs `.github/workflows/release.yml`, repeats the verified build on GitHub Actions, and creates the GitHub release with those artifacts.
 
 ## Azure Compute Gallery VM Application
 
