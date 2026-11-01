@@ -82,6 +82,52 @@ Distribute `artifacts/win-x64/BGInfoPlus.exe`. The target does not need a separa
 
 The generated wallpaper is stored at `%LOCALAPPDATA%\BGInfoPlus\wallpaper.bmp`. Existing Windows wallpaper-fit settings still apply, and desktop policy may prevent wallpaper changes.
 
+## Creating a release
+
+Versioned release artifacts are produced by one script. The version must match the version in `BGInfoPlus.csproj`:
+
+```powershell
+./tools/Build-Release.ps1 -Version 1.0.2
+```
+
+The script runs the tests, publishes the self-contained `win-x64` executable, verifies its Windows file version, and creates these files under `artifacts/release/v1.0.2`:
+
+- Standalone executable and portable ZIP
+- Azure VM Application ZIP and its command manifest
+- SHA-256 checksums
+
+Pushing a version tag such as `v1.0.2` runs `.github/workflows/release.yml`, repeats the verified build on GitHub Actions, and creates the GitHub release with those artifacts.
+
+## Azure Compute Gallery VM Application
+
+The Azure package installs BGInfoPlus under `%ProgramFiles%\BGInfoPlus`, creates an all-users Start Menu shortcut, and registers an uninstall entry. Users run the editor once to configure their own wallpaper and can then enable **Always apply at login**. Removal preserves each user's saved layout and generated wallpaper.
+
+Build the release package first, then publish it to a Compute Gallery. The following example creates the gallery and application definition when they do not already exist, uploads the package as a page blob, and creates version `1.0.2`:
+
+```powershell
+./tools/Publish-AzureVmApplication.ps1 `
+  -ResourceGroupName 'my-gallery-rg' `
+  -GalleryName 'myGallery' `
+  -Location 'westeurope' `
+  -TargetRegions 'westeurope','northeurope' `
+  -StorageAccountName 'mystorageaccount'
+```
+
+The signed-in identity needs access to the resource group and `Storage Blob Data Contributor` on the storage account. The convenience upload path uses a seven-day, read-only user-delegation SAS for gallery ingestion. For stronger security, attach a user-assigned managed identity to the gallery, grant it access to the package blob, and pass the plain blob URL with `-PackageUri` instead. See Microsoft's documentation for [creating and deploying VM Applications](https://learn.microsoft.com/azure/virtual-machines/vm-applications-how-to) and [publishing with managed identity](https://learn.microsoft.com/azure/virtual-machines/vm-applications-publish-with-managed-identity).
+
+Deploy the replicated application version to a VM with failure propagation enabled:
+
+```powershell
+$versionId = '/subscriptions/<subscription-id>/resourceGroups/<gallery-rg>/providers/Microsoft.Compute/galleries/<gallery>/applications/BGInfoPlus/versions/1.0.2'
+az vm application set `
+  --resource-group '<vm-resource-group>' `
+  --name '<vm-name>' `
+  --app-version-ids $versionId `
+  --treat-deployment-as-failure true
+```
+
+Only one version of a given VM Application can be assigned to a VM at a time. The target VM must have the Azure VM Agent and the application version must be replicated to the VM's region.
+
 ## Copyright
 
 No infringement intended on BGInfo (available from Microsoft Sysinternals). Hi, Mark!
