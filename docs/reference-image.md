@@ -33,6 +33,20 @@ Select **Deploy for all users…** and approve the elevation prompt. BGInfoPlus 
 
 The task uses the well-known INTERACTIVE group with limited privileges. It starts ten seconds after any interactive user logs on, so the wallpaper is changed in the correct desktop session rather than in the SYSTEM session.
 
+### RDP and Azure Bastion students
+
+The `INTERACTIVE` task principal covers both console and Remote Desktop users. Windows adds the `Remote Interactive Logon` SID (`S-1-5-14`) to an RDP user's access token, and Microsoft documents that such tokens also contain the `Interactive` SID (`S-1-5-4`). Azure Bastion connects to Windows VMs using RDP, whether the student uses the browser experience or a supported native client, so those sessions activate this task as well. This is independent of whether Windows authenticates the student with a local account, a domain account, or a supported Microsoft Entra ID RDP flow.
+
+The trigger fires when Windows creates a logon session. Reconnecting to an existing disconnected RDP session is not a new logon and does not run the task again; the wallpaper generated at the original logon remains in that profile and session. Signing out and signing in creates a new session and runs BGInfoPlus again.
+
+To verify the token from the same connection method students will use, sign in to a test VM through RDP or Bastion and run:
+
+```cmd
+whoami /groups | findstr /i "S-1-5-4 S-1-5-14"
+```
+
+The output should include `NT AUTHORITY\INTERACTIVE` and, for RDP, `NT AUTHORITY\REMOTE INTERACTIVE LOGON`.
+
 Verify the deployment from an elevated PowerShell prompt:
 
 ```powershell
