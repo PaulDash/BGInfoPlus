@@ -5,12 +5,22 @@ using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
 using System.Text.Json;
+using System.IO;
 using BGInfoPlus.Core;
 
 namespace BGInfoPlus;
 
 internal static class SystemInfo
 {
+    private const int MaxMetadataBytes = 64 * 1024;
+    private static readonly HttpClient MetadataClient = CreateMetadataClient();
+
+    private static HttpClient CreateMetadataClient()
+    {
+        var handler = new HttpClientHandler { UseProxy = false };
+        return new HttpClient(handler, disposeHandler: true) { Timeout = TimeSpan.FromSeconds(3) };
+    }
+
     public static List<InfoField> ReadLocal()
     {
         var fields = new List<InfoField> { new("host", "Hostname", Environment.MachineName),
@@ -41,18 +51,33 @@ internal static class SystemInfo
     public static async Task<List<InfoField>> ReadAzureAsync()
     {
         // IMDS is link-local and must bypass all HTTP proxies; never send credentials.
-        using var handler = new HttpClientHandler { UseProxy = false };
-        using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(3) };
         using var request = new HttpRequestMessage(HttpMethod.Get,
             "http://169.254.169.254/metadata/instance/compute?api-version=2021-02-01");
         request.Headers.Add("Metadata", "true");
-        using var response = await client.SendAsync(request);
-        response.EnsureSuccessStatusCode();
-        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        var fields = new List<InfoField>();
-        foreach (var (key, label) in new[] { ("name", "Azure VM name"), ("vmSize", "Azure VM size"), ("location", "Azure region") })
-            if (json.RootElement.TryGetProperty(key, out var value) && value.GetString() is { Length: > 0 } text)
-                fields.Add(new("azure:" + key, label, text));
-        return fields;
+        try
+        {
+            using var response = await MetadataClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+            if (!response.IsSuccessStatusCode) return [];
+            if (response.Content.Headers.ContentLength is > MaxMetadataBytes) return [];
+            await using var stream = await response.Content.ReadAsStreamAsync();
+            using var buffer = new MemoryStream(Math.Min((int)(response.Content.Headers.ContentLength ?? 4096), MaxMetadataBytes));
+            var chunk = new byte[4096];
+            while (true)
+            {
+                var read = await stream.ReadAsync(chunk);
+                if (read == 0) break;
+                if (buffer.Length + read > MaxMetadataBytes) return [];
+                buffer.Write(chunk, 0, read);
+            }
+            buffer.Position = 0;
+            using var json = JsonDocument.Parse(buffer);
+            var fields = new List<InfoField>();
+            foreach (var (key, label) in new[] { ("name", "Azure VM name"), ("vmSize", "Azure VM size"), ("location", "Azure region") })
+                if (json.RootElement.TryGetProperty(key, out var value) && value.GetString() is { Length: > 0 } text)
+                    fields.Add(new("azure:" + key, label, DataSources.LimitValue(text)));
+            return fields;
+        }
+        catch (HttpRequestException) { return []; }
+        catch (TaskCanceledException) { return []; }
     }
 }

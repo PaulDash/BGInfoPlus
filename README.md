@@ -1,49 +1,87 @@
 # BGInfoPlus
+
 A lean Windows wallpaper information utility for Azure VMs, built with C# and WPF.
 
-## First version
+## Usage
 
-- Select fields, preview the wallpaper, and apply it to the current Windows user's desktop.
-- Hostname, username, local versus domain/external account context.
-- Active network interfaces: IPv4/IPv6 addresses with subnet prefix lengths, and DNS server addresses.
-- Azure VM name, size, and region through the in-guest Instance Metadata Service (IMDS), when available. Requests bypass proxies, carry the required Metadata header, and time out after three seconds. No Azure credentials are needed.
-- CustomData from `C:\AzureData\CustomData.bin`, or a file chosen in the editor. Accepts Base64-encoded UTF-8 JSON and already-decoded JSON. Nested objects and arrays become selectable JSON Pointer paths. Malformed data and duplicate paths produce an error without blocking system fields.
-- Solid dark wallpaper, upper-right text, selectable font size. Long content is clipped to the wallpaper bounds; inspect the preview before applying.
-- Field selection, source path, and font size persist when applying; values are refreshed when the editor opens or Refresh is clicked. Missing fields remain selected in saved preferences for when they become available again.
+BGInfoPlus is a portable Windows application. Run `BGInfoPlus.exe` directly; installation and a separate .NET runtime are not required.
 
-CustomData fields are initially unchecked. Selected values are written to the wallpaper image and visible on the desktop; choose them carefully. The app reads CustomData only and never executes it. Windows permissions still control access to its source file; use a readable copy if needed. It does not retrieve CustomData through IMDS.
+1. Select the output resolution to the left of **Preview**. The current primary-screen resolution is selected initially.
+2. Enter fixed text in the editor and use the toolbar to set the font, size, color, emphasis, alignment, and wallpaper color.
+3. Use a helper action to choose system data. BGInfoPlus creates a named placeholder, such as `{Hostname}`, and inserts it at the cursor. Placeholders can be moved and formatted like normal text.
+4. Select **Preview** to resolve the current values and inspect the generated wallpaper without changing the desktop.
+5. Select **Export image** to save a static PNG, BMP, or JPEG, or select **Apply wallpaper** to save the configuration and update the current user's wallpaper.
 
-UserData is deferred. Multiple desktop support, VBScript, countdowns, timers, databases, popups, taskbar integration, and RTF are outside scope. VM agent status is not part of the agreed first-version field list.
+Enable **Always apply at login** before applying the wallpaper if it should be regenerated whenever the current user signs in. BGInfoPlus registers the current executable under the user's Windows `Run` key. At login it starts with `--apply`, reads the saved configuration, refreshes the wallpaper without opening the editor, and exits. Clear the checkbox and select **Apply wallpaper** again to remove that login entry.
 
-## Build and run
+### Data helpers
 
-Use the .NET 10 SDK. The application requires Windows 10/11 or a compatible Windows Server desktop environment for execution. Development builds can cross-compile on Linux, but UI and wallpaper validation require Windows.
+The helper actions provide:
+
+- **Environment variables** — values available to the BGInfoPlus process.
+- **Registry** — browse supported registry hives and select a value.
+- **Networking** — select a network interface and values such as IP addresses, prefix, subnet mask, gateway, DNS, DHCP, MAC address, speed, and MTU.
+- **UserData** — select scalar values from a UTF-8 JSON file or Base64-encoded UTF-8 JSON file. The file is read again whenever the wallpaper is generated.
+- **Azure metadata** — VM name, size, and region from the Azure Instance Metadata Service. These values are available only when the application is running on a supported Azure VM with access to IMDS.
+- **CIM system information** — common operating-system and hardware values without a WMI dependency.
+
+**CustomData** is reserved for a future release and is currently disabled. If a source or selected value is unavailable, its placeholder is rendered as empty; the rest of the wallpaper is still generated.
+
+### Saved files and troubleshooting
+
+- Configuration is stored for the current user under `HKCU\Software\BGInfoPlus`.
+- The generated wallpaper is `%LOCALAPPDATA%\BGInfoPlus\wallpaper.bmp`.
+- Automatic-apply diagnostics are written to `%LOCALAPPDATA%\BGInfoPlus\BGInfoPlus.log`.
+- Existing Windows wallpaper-fit settings and administrator policy still control how Windows displays or permits the generated image.
+- Rendering is limited to 3840 × 2160. Decoded UserData is limited to 256 KiB, 256 scalar values, and 4,096 characters per value.
+
+## Features and behavior
+
+BGInfoPlus now has separate design and runtime paths:
+
+- Opening `BGInfoPlus.exe` displays a rich layout editor. Text can be positioned with paragraph alignment and formatted with size, bold, italic, and underline controls.
+- Toolbar color controls use the standard Windows color dialog to format selected text and set the solid wallpaper background.
+- **Preview** resolves the current values and opens a uniformly scaled wallpaper preview without changing the desktop. A resolution selector defaults to the current primary display and controls the exact output bitmap dimensions.
+- **Export image** writes the resolved layout as PNG, BMP, or JPEG at the selected resolution without applying it as the wallpaper.
+- **Apply wallpaper** saves the layout and placeholder mappings under `HKCU\Software\BGInfoPlus`, renders the wallpaper, and assigns it to the current user's desktop.
+- When **Always apply at login** is selected, the editor adds `BGInfoPlus` to the current user's `Run` registry key with the `--apply` argument. That mode has no UI: it reads the registry configuration, refreshes the wallpaper, and exits.
+
+Placeholders are inserted through helper windows for:
+
+- Environment variables
+- Registry values through a hive/key browser with value name, type, and data preview
+- Per-interface networking values, including IP addressing, prefix and subnet mask, gateways, DNS, DHCP, MAC, link state, speed, and MTU
+- Azure IMDS values
+- Selected scalar values from UserData JSON
+- Common system facts exposed by the CIM helper without a WMI dependency
+
+All data sources are optional. An unreachable Azure Instance Metadata Service, a missing UserData file, an inaccessible registry value, or a value that is temporarily absent resolves to an empty placeholder and does not produce a user-facing error. UserData accepts UTF-8 JSON or Base64-encoded UTF-8 JSON and is read but never executed. Decoded UserData is limited to 256 KiB, 256 scalar values, and 4,096 characters per value.
+
+Rendering is limited to 3840 × 2160, placeholder values and configuration fields are bounded, and wallpaper writes use same-directory atomic replacement. Rendering is serialized in-process; wallpaper application is also serialized across processes. Automatic-apply failures are written to a bounded `%LOCALAPPDATA%\BGInfoPlus\BGInfoPlus.log` and return a nonzero exit code.
+
+## Build and test
+
+Use the .NET 10 SDK on Windows:
 
 ```powershell
+dotnet build src/BGInfoPlus -c Release
 dotnet run --project tests/BGInfoPlus.Tests -c Release
-dotnet run --project src/BGInfoPlus
 ```
 
-The test executable runs 12 checks of actual CustomData parsing, including nested values, Base64, BOMs, arrays, malformed input, and ambiguous paths. It exits nonzero on failure.
+The test executable covers bounded UserData parsing, placeholder behavior across formatted runs, non-cascading substitutions, document and image limits, actual WPF rendering dimensions, and successful and failed atomic writes. Tests requiring Azure IMDS, machine-specific registry data, network adapters, or desktop policy remain integration tests and are intentionally not part of the build suite.
 
-## Native EXE deployment
+## Single-file deployment
+
+The project is configured for self-contained, single-file publishing with native libraries included:
 
 ```powershell
-dotnet publish src/BGInfoPlus -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o artifacts/win-x64
+dotnet publish src/BGInfoPlus -c Release -r win-x64 -o artifacts/win-x64
 ```
 
-Distribute `artifacts/win-x64/BGInfoPlus.exe`. This is a native Windows executable containing the managed application and .NET runtime; targets do not need .NET installed. Native runtime components extract locally on launch. Use `win-arm64` instead of `win-x64` for ARM64 Windows. No trimming or Native AOT is used (WPF compatibility).
+Distribute `artifacts/win-x64/BGInfoPlus.exe`. The target does not need a separate .NET installation or third-party runtime. Use `win-arm64` for ARM64 Windows. WPF prevents Native AOT and native runtime components may extract to the framework's per-user temporary location on launch.
 
-Settings and the generated `wallpaper.bmp` are stored in `%LOCALAPPDATA%\BGInfoPlus`. Applying replaces the current wallpaper; restore your previous background through Windows Settings. Existing Windows wallpaper fit settings apply. There is no background process or scheduled refresh. Desktop policy may prevent wallpaper changes. The CI workflow runs parsing checks and publishes the x64 artifact on Windows.
-
-## Windows smoke test
-
-1. Run the published EXE on a desktop machine without a separately installed .NET runtime.
-2. Confirm hostname, current account context, IP/prefix and DNS values against Windows settings. On an Azure VM, check VM name/size/region; off Azure, expect metadata to be unavailable without blocking the editor.
-3. Choose a file containing Base64-encoded JSON with nested objects and arrays. Confirm fields start unchecked, select several, change text size, and inspect the preview.
-4. Apply and verify the wallpaper, then reopen to verify saved selection and refreshed values.
-5. Try a missing file and malformed JSON: errors should appear while local fields remain usable. Restore the previous wallpaper through Windows Settings.
+The generated wallpaper is stored at `%LOCALAPPDATA%\BGInfoPlus\wallpaper.bmp`. Existing Windows wallpaper-fit settings still apply, and desktop policy may prevent wallpaper changes.
 
 ## Copyright
 
-No infringement intended on BGInfo (available here: https://learn.microsoft.com/en-us/sysinternals/downloads/bginfo). Hi, Mark!
+No infringement intended on BGInfo (available from Microsoft Sysinternals). Hi, Mark!
