@@ -4,6 +4,16 @@ param()
 
 $ErrorActionPreference = 'Stop'
 $script:SelectedSubscriptionId = $null
+$script:AzPythonPath = $null
+
+function Invoke-AzCli {
+    param([Parameter(Mandatory)] [string[]]$Arguments)
+    if (-not [string]::IsNullOrWhiteSpace($script:AzPythonPath)) {
+        & $script:AzPythonPath -IBm azure.cli @Arguments
+        return
+    }
+    & az @Arguments
+}
 
 function Invoke-AzJson {
     param([Parameter(Mandatory)] [string[]]$Arguments)
@@ -11,7 +21,7 @@ function Invoke-AzJson {
     if (-not [string]::IsNullOrWhiteSpace($script:SelectedSubscriptionId) -and '--subscription' -notin $Arguments) {
         $effectiveArguments += @('--subscription', $script:SelectedSubscriptionId)
     }
-    $output = & az @effectiveArguments --only-show-errors --output json 2>&1
+    $output = Invoke-AzCli ($effectiveArguments + @('--only-show-errors', '--output', 'json')) 2>&1
     if ($LASTEXITCODE -ne 0) { throw ($output -join [Environment]::NewLine) }
     if ([string]::IsNullOrWhiteSpace(($output -join ''))) { return $null }
     return ($output -join [Environment]::NewLine) | ConvertFrom-Json
@@ -23,12 +33,13 @@ function Invoke-AzQuiet {
     if (-not [string]::IsNullOrWhiteSpace($script:SelectedSubscriptionId) -and '--subscription' -notin $Arguments) {
         $effectiveArguments += @('--subscription', $script:SelectedSubscriptionId)
     }
-    if ($ContainsSecret) {
+<#if ($ContainsSecret) {
         & az @effectiveArguments --only-show-errors --output none 2>$null
         if ($LASTEXITCODE -ne 0) { throw "Azure CLI operation failed with exit code $LASTEXITCODE. Secret-bearing arguments were not included in this error." }
         return
     }
-    $output = & az @effectiveArguments --only-show-errors --output none 2>&1
+#>
+    $output = Invoke-AzCli ($effectiveArguments + @('--only-show-errors', '--output', 'none')) 2>&1
     if ($LASTEXITCODE -ne 0) { throw ($output -join [Environment]::NewLine) }
 }
 
@@ -88,11 +99,17 @@ Write-Host 'BGInfoPlus — Azure Compute Gallery VM Application publisher' -Fore
 Write-Host 'This wizard discovers Azure resources at runtime. It does not write subscription IDs, resource names, URLs, credentials, SAS values, or your answers into the script or local settings.'
 Write-Host 'Press Ctrl+C at any prompt to stop.'
 
-if (-not (Get-Command az -ErrorAction SilentlyContinue)) { throw 'Azure CLI is not installed or is not on PATH.' }
-& az account show --only-show-errors --output none 2>$null
+$azCommand = Get-Command az -ErrorAction SilentlyContinue
+if (-not $azCommand) { throw 'Azure CLI is not installed or is not on PATH.' }
+if ($IsWindows -and $azCommand.Source -match '[/\\]wbin[/\\]az\.cmd$') {
+    $azureCliRoot = Split-Path -Parent (Split-Path -Parent $azCommand.Source)
+    $candidatePython = Join-Path $azureCliRoot 'python.exe'
+    if (Test-Path -LiteralPath $candidatePython -PathType Leaf) { $script:AzPythonPath = $candidatePython }
+}
+Invoke-AzCli @('account', 'show', '--only-show-errors', '--output', 'none') 2>$null
 if ($LASTEXITCODE -ne 0) {
     if (-not (Read-YesNo 'Azure CLI is not signed in. Sign in now?')) { throw 'Azure sign-in is required.' }
-    & az login --only-show-errors
+    Invoke-AzCli @('login', '--only-show-errors')
     if ($LASTEXITCODE -ne 0) { throw 'Azure sign-in failed.' }
 }
 
@@ -210,11 +227,11 @@ if (-not (Read-YesNo 'Proceed with these Azure changes?' $false)) { Write-Host '
 if ($createResourceGroup) { Invoke-AzQuiet @('group', 'create', '--name', $resourceGroupName, '--location', $location) }
 if ($createGallery) { Invoke-AzQuiet @('sig', 'create', '--resource-group', $resourceGroupName, '--gallery-name', $galleryName, '--location', $location) }
 
-& az sig gallery-application show --resource-group $resourceGroupName --gallery-name $galleryName --application-name $applicationName --subscription $subscription.id --only-show-errors --output none 2>$null
+Invoke-AzCli @('sig', 'gallery-application', 'show', '--resource-group', $resourceGroupName, '--gallery-name', $galleryName, '--application-name', $applicationName, '--subscription', $subscription.id, '--only-show-errors', '--output', 'none') 2>$null
 if ($LASTEXITCODE -ne 0) {
     Invoke-AzQuiet @('sig', 'gallery-application', 'create', '--resource-group', $resourceGroupName, '--gallery-name', $galleryName, '--application-name', $applicationName, '--location', $location, '--os-type', 'Windows', '--description', 'Azure-focused system information wallpaper utility.')
 }
-& az sig gallery-application version show --resource-group $resourceGroupName --gallery-name $galleryName --application-name $applicationName --version-name $version --subscription $subscription.id --only-show-errors --output none 2>$null
+Invoke-AzCli @('sig', 'gallery-application', 'version', 'show', '--resource-group', $resourceGroupName, '--gallery-name', $galleryName, '--application-name', $applicationName, '--version-name', $version, '--subscription', $subscription.id, '--only-show-errors', '--output', 'none') 2>$null
 if ($LASTEXITCODE -eq 0) { throw "VM Application version $applicationName/$version already exists. Version resources are immutable; increment the application version." }
 
 if ($method -eq '1') {
@@ -226,7 +243,7 @@ if ($method -eq '1') {
         $blobName = [IO.Path]::GetFileName($packagePath)
         Invoke-AzQuiet @('storage', 'blob', 'upload', '--account-name', $storageAccountName, '--container-name', $containerName, '--name', $blobName, '--file', $packagePath, '--type', 'page', '--overwrite', 'true', '--auth-mode', 'login')
         $expiry = [DateTime]::UtcNow.AddDays(7).ToString('yyyy-MM-ddTHH:mmZ')
-        $sas = (& az storage blob generate-sas --account-name $storageAccountName --container-name $containerName --name $blobName --permissions r --expiry $expiry --https-only --auth-mode login --as-user --subscription $subscription.id --only-show-errors --output tsv 2>$null)
+        $sas = (Invoke-AzCli @('storage', 'blob', 'generate-sas', '--account-name', $storageAccountName, '--container-name', $containerName, '--name', $blobName, '--permissions', 'r', '--expiry', $expiry, '--https-only', '--auth-mode', 'login', '--as-user', '--subscription', $subscription.id, '--only-show-errors', '--output', 'tsv') 2>$null)
         if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($sas)) { throw 'SAS generation failed.' }
         $packageUri = "https://$storageAccountName.blob.core.windows.net/$containerName/$blobName`?$sas"
     }
@@ -235,9 +252,10 @@ if ($method -eq '1') {
     }
 }
 
-$targetRegionJson = @($targetRegions | ForEach-Object {
+$targetRegionEntries = @($targetRegions | ForEach-Object {
     [ordered]@{ name = $_; regionalReplicaCount = 1; storageAccountType = 'Standard_LRS' }
-}) | ConvertTo-Json -Compress
+})
+$targetRegionJson = ConvertTo-Json -InputObject $targetRegionEntries -Compress
 
 Invoke-AzQuiet -ContainsSecret @('sig', 'gallery-application', 'version', 'create',
     '--resource-group', $resourceGroupName,
