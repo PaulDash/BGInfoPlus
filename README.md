@@ -2,6 +2,36 @@
 
 A lean Windows wallpaper information utility for Azure VMs, built with C# and WPF.
 
+## Overview
+
+BGInfoPlus shows system info on the desktop wallpaper. It supports placeholders and custom layouts.
+
+![BGInfoPlus screenshot](screenshot.png)
+
+## Features and behavior
+
+BGInfoPlus has separate design and runtime paths:
+
+- Opening `BGInfoPlus.exe` displays a rich layout editor. Text can be positioned with paragraph alignment and formatted with size, bold, italic, and underline controls.
+- Toolbar color controls use the standard Windows color dialog to format selected text and set the solid wallpaper background.
+- **Preview** resolves the current values and opens a uniformly scaled wallpaper preview without changing the desktop. A resolution selector defaults to the current primary display and controls the exact output bitmap dimensions.
+- **Export image** writes the resolved layout as PNG, BMP, or JPEG at the selected resolution without applying it as the wallpaper.
+- **Apply wallpaper** saves the layout and placeholder mappings under `HKCU\Software\BGInfoPlus`, renders the wallpaper, and assigns it to the current user's desktop.
+- When **Always apply at login** is selected, the editor adds `BGInfoPlus` to the current user's `Run` registry key with the `--apply` argument. That mode has no UI: it reads the registry configuration, refreshes the wallpaper, and exits.
+
+Placeholders are inserted through helper windows for:
+
+- Environment variables
+- Registry values through a hive/key browser with value name, type, and data preview
+- Per-interface networking values, including IP addressing, prefix and subnet mask, gateways, DNS, DHCP, MAC, link state, speed, and MTU
+- Azure IMDS values
+- Selected scalar values from UserData JSON
+- Common system facts exposed by the CIM helper without a WMI dependency
+
+All data sources are optional. An unreachable Azure Instance Metadata Service, a missing UserData file, an inaccessible registry value, or a value that is temporarily absent resolves to an empty placeholder and does not produce a user-facing error. UserData accepts UTF-8 JSON or Base64-encoded UTF-8 JSON and is read but never executed. Decoded UserData is limited to 256 KiB, 256 scalar values, and 4,096 characters per value.
+
+Rendering is limited to 3840 × 2160, placeholder values and configuration fields are bounded, and wallpaper writes use same-directory atomic replacement. Rendering is serialized in-process; wallpaper application is also serialized across processes. Automatic-apply failures are written to a bounded `%LOCALAPPDATA%\BGInfoPlus\BGInfoPlus.log` and return a nonzero exit code.
+
 ## Usage
 
 BGInfoPlus is a portable Windows application. Run `BGInfoPlus.exe` directly; installation and a separate .NET runtime are not required.
@@ -38,30 +68,6 @@ The helper actions provide:
 - Automatic-apply diagnostics are written to `%LOCALAPPDATA%\BGInfoPlus\BGInfoPlus.log`.
 - Existing Windows wallpaper-fit settings and administrator policy still control how Windows displays or permits the generated image.
 - Rendering is limited to 3840 × 2160. Decoded UserData is limited to 256 KiB, 256 scalar values, and 4,096 characters per value.
-
-## Features and behavior
-
-BGInfoPlus now has separate design and runtime paths:
-
-- Opening `BGInfoPlus.exe` displays a rich layout editor. Text can be positioned with paragraph alignment and formatted with size, bold, italic, and underline controls.
-- Toolbar color controls use the standard Windows color dialog to format selected text and set the solid wallpaper background.
-- **Preview** resolves the current values and opens a uniformly scaled wallpaper preview without changing the desktop. A resolution selector defaults to the current primary display and controls the exact output bitmap dimensions.
-- **Export image** writes the resolved layout as PNG, BMP, or JPEG at the selected resolution without applying it as the wallpaper.
-- **Apply wallpaper** saves the layout and placeholder mappings under `HKCU\Software\BGInfoPlus`, renders the wallpaper, and assigns it to the current user's desktop.
-- When **Always apply at login** is selected, the editor adds `BGInfoPlus` to the current user's `Run` registry key with the `--apply` argument. That mode has no UI: it reads the registry configuration, refreshes the wallpaper, and exits.
-
-Placeholders are inserted through helper windows for:
-
-- Environment variables
-- Registry values through a hive/key browser with value name, type, and data preview
-- Per-interface networking values, including IP addressing, prefix and subnet mask, gateways, DNS, DHCP, MAC, link state, speed, and MTU
-- Azure IMDS values
-- Selected scalar values from UserData JSON
-- Common system facts exposed by the CIM helper without a WMI dependency
-
-All data sources are optional. An unreachable Azure Instance Metadata Service, a missing UserData file, an inaccessible registry value, or a value that is temporarily absent resolves to an empty placeholder and does not produce a user-facing error. UserData accepts UTF-8 JSON or Base64-encoded UTF-8 JSON and is read but never executed. Decoded UserData is limited to 256 KiB, 256 scalar values, and 4,096 characters per value.
-
-Rendering is limited to 3840 × 2160, placeholder values and configuration fields are bounded, and wallpaper writes use same-directory atomic replacement. Rendering is serialized in-process; wallpaper application is also serialized across processes. Automatic-apply failures are written to a bounded `%LOCALAPPDATA%\BGInfoPlus\BGInfoPlus.log` and return a nonzero exit code.
 
 ## Build and test
 
