@@ -33,8 +33,18 @@ $publishedVersion = (Get-Item -LiteralPath $publishedExe).VersionInfo.FileVersio
 if ($publishedVersion -ne "$Version.0") { throw "Published file version is $publishedVersion, expected $Version.0." }
 $defaultConfiguration = Join-Path $releaseRoot 'BGInfoPlus-DefaultConfig.json'
 & $publishedExe --export-default-config $defaultConfiguration
-if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $defaultConfiguration -PathType Leaf)) {
-    throw 'Could not generate the default BGInfoPlus configuration.'
+if (-not (Test-Path -LiteralPath $defaultConfiguration -PathType Leaf)) {
+    throw 'The default BGInfoPlus configuration was not created.'
+}
+try {
+    $defaultConfigurationData = Get-Content -LiteralPath $defaultConfiguration -Raw | ConvertFrom-Json -ErrorAction Stop
+    if ([string]::IsNullOrWhiteSpace($defaultConfigurationData.Document) -or
+        $defaultConfigurationData.Placeholders.Count -lt 1 -or $defaultConfigurationData.RunAtSignIn) {
+        throw 'The generated default configuration is missing required values.'
+    }
+}
+catch {
+    throw "Could not generate a valid default BGInfoPlus configuration: $($_.Exception.Message)"
 }
 
 $installerProject = Join-Path $repositoryRoot 'packaging\standalone-installer\BGInfoPlus.Setup.wixproj'
