@@ -1,6 +1,6 @@
 #Requires -Version 5.1
 [CmdletBinding()]
-param()
+param([string]$ConfigurationPath)
 
 $ErrorActionPreference = 'Stop'
 $principal = [Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())
@@ -39,7 +39,31 @@ catch {
 
 $installedRemoveScript = Join-Path $installDirectory 'Remove-BGInfoPlus.ps1'
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Remove-BGInfoPlus.ps1') -Destination $installedRemoveScript -Force
-Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Deploy-BGInfoPlusForAllUsers.ps1') -Destination (Join-Path $installDirectory 'Deploy-BGInfoPlusForAllUsers.ps1') -Force
+$installedDeploymentScript = Join-Path $installDirectory 'Deploy-BGInfoPlusForAllUsers.ps1'
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Deploy-BGInfoPlusForAllUsers.ps1') -Destination $installedDeploymentScript -Force
+
+if (-not [string]::IsNullOrWhiteSpace($ConfigurationPath)) {
+    $configurationSource = [IO.Path]::GetFullPath($ConfigurationPath)
+    if (-not (Test-Path -LiteralPath $configurationSource -PathType Leaf)) {
+        throw "The supplied BGInfoPlus configuration was not found at $configurationSource."
+    }
+    $sharedDirectory = Join-Path $env:ProgramData 'BGInfoPlus'
+    $sharedConfiguration = Join-Path $sharedDirectory 'config.json'
+    $managedHashPath = Join-Path $sharedDirectory 'config.source.sha256'
+    $installTemplate = -not (Test-Path -LiteralPath $sharedConfiguration -PathType Leaf)
+    if (-not $installTemplate -and (Test-Path -LiteralPath $managedHashPath -PathType Leaf)) {
+        $managedHash = (Get-Content -LiteralPath $managedHashPath -Raw).Trim()
+        $currentHash = (Get-FileHash -LiteralPath $sharedConfiguration -Algorithm SHA256).Hash
+        $installTemplate = $managedHash -match '^[A-Fa-f0-9]{64}$' -and $currentHash -eq $managedHash
+    }
+    if ($installTemplate) {
+        & $installedDeploymentScript -TemplatePath $configurationSource
+        $installedHash = (Get-FileHash -LiteralPath $sharedConfiguration -Algorithm SHA256).Hash
+        Set-Content -LiteralPath $managedHashPath -Value $installedHash -Encoding ascii
+    } else {
+        & $installedDeploymentScript -PreserveConfiguration
+    }
+}
 
 $shortcutPath = Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\BGInfoPlus.lnk'
 $shell = New-Object -ComObject WScript.Shell

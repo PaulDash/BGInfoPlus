@@ -26,6 +26,40 @@ internal static class Program
                 return 1;
             }
         }
+        var defaultExportIndex = Array.FindIndex(args, a => a.Equals("--export-default-config", StringComparison.OrdinalIgnoreCase));
+        if (defaultExportIndex >= 0)
+        {
+            try
+            {
+                if (defaultExportIndex + 1 >= args.Length || string.IsNullOrWhiteSpace(args[defaultExportIndex + 1]))
+                    throw new ArgumentException("--export-default-config requires a destination path.");
+                ConfigurationFileStore.Save(args[defaultExportIndex + 1], ConfigurationFileStore.CreateDefault());
+                return 0;
+            }
+            catch (Exception exception)
+            {
+                AppLog.Error("Default configuration export failed.", exception);
+                return 1;
+            }
+        }
+        var installConfigIndex = Array.FindIndex(args, a => a.Equals("--install-config", StringComparison.OrdinalIgnoreCase));
+        if (installConfigIndex >= 0)
+        {
+            try
+            {
+                if (installConfigIndex + 2 >= args.Length || string.IsNullOrWhiteSpace(args[installConfigIndex + 1]) ||
+                    string.IsNullOrWhiteSpace(args[installConfigIndex + 2]))
+                    throw new ArgumentException("--install-config requires a source and destination path.");
+                ConfigurationFileStore.Save(args[installConfigIndex + 2],
+                    ConfigurationFileStore.Load(args[installConfigIndex + 1]));
+                return 0;
+            }
+            catch (Exception exception)
+            {
+                AppLog.Error("Shared configuration installation failed.", exception);
+                return 1;
+            }
+        }
         if (args.Any(a => a.Equals("--apply", StringComparison.OrdinalIgnoreCase)))
         {
             try

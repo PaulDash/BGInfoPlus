@@ -31,6 +31,16 @@ if ($LASTEXITCODE -ne 0) { throw 'Release publish failed.' }
 $publishedExe = Join-Path $publishRoot 'BGInfoPlus.exe'
 $publishedVersion = (Get-Item -LiteralPath $publishedExe).VersionInfo.FileVersion
 if ($publishedVersion -ne "$Version.0") { throw "Published file version is $publishedVersion, expected $Version.0." }
+$defaultConfiguration = Join-Path $releaseRoot 'BGInfoPlus-DefaultConfig.json'
+& $publishedExe --export-default-config $defaultConfiguration
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $defaultConfiguration -PathType Leaf)) {
+    throw 'Could not generate the default BGInfoPlus configuration.'
+}
+
+$installerProject = Join-Path $repositoryRoot 'packaging\standalone-installer\BGInfoPlus.Setup.wixproj'
+$standaloneMsi = Join-Path $releaseRoot "BGInfoPlus-$Version-win-x64.msi"
+& dotnet build $installerProject -c Release -p:ProductVersion=$Version -p:PublishDirectory=$publishRoot -p:RepositoryRoot=$repositoryRoot -p:OutputName="BGInfoPlus-$Version-win-x64" -o $releaseRoot
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $standaloneMsi -PathType Leaf)) { throw 'MSI build failed.' }
 
 $standaloneExe = Join-Path $releaseRoot "BGInfoPlus-$Version-win-x64.exe"
 Copy-Item -LiteralPath $publishedExe -Destination $standaloneExe
@@ -61,20 +71,24 @@ $vmPackage = Join-Path $releaseRoot $vmPackageName
 Compress-Archive -Path (Join-Path $vmStage '*') -DestinationPath $vmPackage -CompressionLevel Optimal
 
 $expand = "if (Test-Path '.\BGInfoPlus-payload') { Remove-Item -LiteralPath '.\BGInfoPlus-payload' -Recurse -Force }; Expand-Archive -LiteralPath '.\$vmPackageName' -DestinationPath '.\BGInfoPlus-payload' -Force"
-$installCommand = "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command `"$expand; & '.\BGInfoPlus-payload\Install-BGInfoPlus.ps1'`""
-$removeCommand = "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command `"$expand; & '.\BGInfoPlus-payload\Remove-BGInfoPlus.ps1'`""
+$configurationFileName = 'BGInfoPlus-config.json'
+$installAction = "& '.\BGInfoPlus-payload\Install-BGInfoPlus.ps1' -ConfigurationPath '.\$configurationFileName'"
+$removeAction = "& '.\BGInfoPlus-payload\Remove-BGInfoPlus.ps1'"
+$installCommand = "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command `"try { $expand; $installAction } catch { Write-Error `$_; exit 1 }`""
+$removeCommand = "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command `"try { $expand; $removeAction } catch { Write-Error `$_; exit 1 }`""
 $manifest = [ordered]@{
     applicationName = 'BGInfoPlus'
     version = $Version
     supportedOsType = 'Windows'
     packageFileName = $vmPackageName
+    configurationFileName = $configurationFileName
     installCommand = $installCommand
     updateCommand = $installCommand
     removeCommand = $removeCommand
 }
 $manifest | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $releaseRoot 'azure-vm-application.json') -Encoding UTF8
 
-$releaseFiles = @($standaloneExe, $portableZip, $vmPackage, (Join-Path $releaseRoot 'azure-vm-application.json'))
+$releaseFiles = @($standaloneExe, $standaloneMsi, $defaultConfiguration, $portableZip, $vmPackage, (Join-Path $releaseRoot 'azure-vm-application.json'))
 $checksums = foreach ($file in $releaseFiles) {
     $hash = Get-FileHash -LiteralPath $file -Algorithm SHA256
     "$($hash.Hash.ToLowerInvariant())  $([IO.Path]::GetFileName($file))"

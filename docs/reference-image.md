@@ -4,13 +4,15 @@ This workflow prepares a Windows reference VM so that BGInfoPlus automatically g
 
 ## 1. Install BGInfoPlus
 
-Install the Azure VM Application package, or extract the portable ZIP into a permanent, administrator-controlled directory. The Azure package uses:
+Install the Azure VM Application package or the machine-wide MSI, or extract the portable ZIP into a permanent, administrator-controlled directory. The Azure package uses:
 
 ```text
 C:\Program Files\BGInfoPlus\BGInfoPlus.exe
 ```
 
 Do not prepare the image from the standalone EXE because it does not include the all-users deployment helper. Do not place the portable package in a profile or temporary directory; the scheduled task must still be able to find it after Sysprep.
+
+Azure VM Application setup provides the shared default and logon task. See [Installation and Deployment](deployment.md) for configuration overrides and update behavior.
 
 ## 2. Design and test the wallpaper
 
@@ -24,7 +26,7 @@ Avoid UserData paths or other file references inside the preparation account's p
 
 ## 3. Deploy the design for all users
 
-Select **Deploy for all users…** and approve the elevation prompt. BGInfoPlus then:
+For a custom reference-image design, select **Deploy for all users…** and approve the elevation prompt. This replaces the shared template and ensures the all-users task is registered. On a new Azure VM Application install, the release default template and task are provisioned automatically. The deployment helper:
 
 - exports the validated design to `%ProgramData%\BGInfoPlus\config.json`;
 - grants ordinary users read-only access to that directory;

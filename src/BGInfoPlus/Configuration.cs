@@ -74,6 +74,14 @@ internal static class ConfigurationFileStore
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
+    public static AppConfiguration CreateDefault() => new(
+        DocumentTools.Save(DocumentTools.NewDocument()),
+        [
+            new PlaceholderDefinition("Hostname", "Hostname", "Networking", "Hostname"),
+            new PlaceholderDefinition("IPv4", "IPv4 addresses", "Networking", "IPv4")
+        ],
+        false, 1920, 1080, "#0F172A");
+
     public static AppConfiguration Load(string path)
     {
         var fullPath = Path.GetFullPath(path);

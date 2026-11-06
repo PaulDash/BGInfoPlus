@@ -13,6 +13,7 @@ $destinationExe = Join-Path $installDirectory 'BGInfoPlus.exe'
 
 Unregister-ScheduledTask -TaskName 'BGInfoPlus - Apply wallpaper at logon' -Confirm:$false -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath (Join-Path $env:ProgramData 'BGInfoPlus\config.json') -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath (Join-Path $env:ProgramData 'BGInfoPlus\config.source.sha256') -Force -ErrorAction SilentlyContinue
 
 Get-Process -Name BGInfoPlus -ErrorAction SilentlyContinue | ForEach-Object {
     try {

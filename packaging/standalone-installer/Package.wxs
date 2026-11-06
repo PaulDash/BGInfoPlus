@@ -1,0 +1,54 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="BGInfoPlus" Manufacturer="Paul Dash" Version="$(var.ProductVersion)"
+           UpgradeCode="{8C892951-3ED6-4B5F-9B9B-F470B24A4D67}" Scope="perMachine">
+    <MajorUpgrade DowngradeErrorMessage="A newer version of BGInfoPlus is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+    <Icon Id="BGInfoPlusIcon" SourceFile="$(var.RepositoryRoot)\src\BGInfoPlus\Assets\BGInfoPlus.ico" />
+    <Property Id="ARPPRODUCTICON" Value="BGInfoPlusIcon" />
+
+    <Feature Id="MainFeature" Title="BGInfoPlus" Level="1">
+      <ComponentGroupRef Id="ApplicationFiles" />
+      <ComponentGroupRef Id="StartMenuShortcut" />
+    </Feature>
+
+    <CustomAction Id="RemoveSharedDeployment" Directory="System64Folder"
+                  ExeCommand="powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[INSTALLFOLDER]Remove-BGInfoPlusSharedDeployment.ps1&quot;"
+                  Execute="deferred" Impersonate="no" Return="check" />
+    <InstallExecuteSequence>
+      <Custom Action="RemoveSharedDeployment" Before="RemoveFiles" Condition="REMOVE=&quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE" />
+    </InstallExecuteSequence>
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="BGInfoPlus" />
+    </StandardDirectory>
+    <StandardDirectory Id="CommonAppDataFolder">
+      <Directory Id="CommonMicrosoftFolder" Name="Microsoft">
+        <Directory Id="CommonWindowsFolder" Name="Windows">
+          <Directory Id="CommonStartMenuFolder" Name="Start Menu">
+            <Directory Id="CommonProgramsFolder" Name="Programs">
+              <Directory Id="APPLICATIONPROGRAMSFOLDER" Name="BGInfoPlus" />
+            </Directory>
+          </Directory>
+        </Directory>
+      </Directory>
+    </StandardDirectory>
+
+    <ComponentGroup Id="ApplicationFiles" Directory="INSTALLFOLDER">
+      <Component Id="ApplicationComponent" Guid="*" Bitness="always64">
+        <File Id="BGInfoPlusExe" Source="$(var.PublishDirectory)\BGInfoPlus.exe" KeyPath="yes" />
+        <File Id="DeployAllUsersScript" Source="$(var.RepositoryRoot)\packaging\azure-vm-application\Deploy-BGInfoPlusForAllUsers.ps1" />
+        <File Id="RemoveSharedDeploymentScript" Source="$(var.RepositoryRoot)\packaging\standalone-installer\Remove-BGInfoPlusSharedDeployment.ps1" />
+      </Component>
+    </ComponentGroup>
+
+    <ComponentGroup Id="StartMenuShortcut" Directory="APPLICATIONPROGRAMSFOLDER">
+      <Component Id="StartMenuComponent" Guid="*">
+        <Shortcut Id="BGInfoPlusShortcut" Name="BGInfoPlus" Target="[INSTALLFOLDER]BGInfoPlus.exe"
+            WorkingDirectory="INSTALLFOLDER" Icon="BGInfoPlusIcon" IconIndex="0" />
+        <RemoveFolder Id="RemoveApplicationProgramsFolder" On="uninstall" />
+        <RegistryValue Root="HKLM" Key="Software\BGInfoPlus\Installer" Name="Installed"
+                       Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+  </Package>
+</Wix>

@@ -1,9 +1,11 @@
 using System.Text;
 using System.Text.Json;
 using System.IO;
+using System.Globalization;
 using BGInfoPlus.Core;
 using BGInfoPlus;
 using System.Windows.Documents;
+using System.Windows.Media;
 
 var count = 0;
 void Check(bool condition, string name) { if (!condition) throw new Exception(name); count++; }
@@ -54,6 +56,19 @@ RunSta(() =>
     }
     static string Text(FlowDocument document) => new TextRange(document.ContentStart, document.ContentEnd).Text.Trim();
 
+    var defaultConfiguration = ConfigurationFileStore.CreateDefault();
+    Check(defaultConfiguration.ImageWidth == 1920 && defaultConfiguration.ImageHeight == 1080 && !defaultConfiguration.RunAtSignIn,
+        "Default shared configuration uses a standard resolution and does not enable per-user auto-apply");
+    Check(defaultConfiguration.Placeholders.Select(p => p.Name).SequenceEqual(new[] { "Hostname", "IPv4" }),
+        "Default shared configuration includes its system placeholders");
+
+    var tabDocument = Document("Name\tValue");
+    var tabRoundTrip = DocumentTools.Load(DocumentTools.Save(tabDocument));
+    Check(Text(tabRoundTrip).Contains('\t'), "Tab character survives formatted document round-trip");
+    var tabConfiguration = new AppConfiguration(DocumentTools.Save(tabRoundTrip), [], false, 640, 480, "#112233");
+    var tabBitmap = WallpaperService.RenderResolved(tabConfiguration, new Dictionary<string, string>());
+    Check(tabBitmap.PixelWidth == 640 && tabBitmap.PixelHeight == 480, "Renderer accepts documents containing tabs");
+
     var missing = DocumentTools.Resolve(DocumentTools.Save(Document("{Missing}")), new Dictionary<string, string>());
     Check(Text(missing) == "", "Missing placeholders resolve to empty text");
 
@@ -90,6 +105,18 @@ Check(AppLimits.IsValidResolution(1920, 1080), "Common resolution accepted");
 Check(AppLimits.IsValidResolution(3840, 2160), "Maximum resolution accepted");
 Check(!AppLimits.IsValidResolution(4096, 2160), "Oversized resolution rejected");
 Check(!AppLimits.IsValidResolution(3840, 2161), "Excessive pixel buffer rejected");
+Check(Editor.TryParseFontSize("8", out var minimumFontSize) && minimumFontSize == 8, "Minimum font size accepted");
+Check(Editor.TryParseFontSize("96", out var maximumFontSize) && maximumFontSize == 96, "Maximum font size accepted");
+var decimalFontSizeText = 24.5.ToString(CultureInfo.CurrentCulture);
+Check(Editor.TryParseFontSize(decimalFontSizeText, out var decimalFontSize) && decimalFontSize == 24.5, "Decimal font size accepted");
+foreach (var invalidSize in new[] { "", "7.99", "96.01", "NaN", "Infinity", "invalid" })
+    Check(!Editor.TryParseFontSize(invalidSize, out _), "Invalid font size rejected: " + invalidSize);
+var recentColors = new List<Color>();
+for (byte value = 0; value < 8; value++) Editor.AddRecentColorToHistory(recentColors, Color.FromRgb(value, 0, 0));
+Check(recentColors.Count == 6 && recentColors[0] == Color.FromRgb(7, 0, 0), "Recent color history is capped and newest-first");
+Editor.AddRecentColorToHistory(recentColors, Color.FromRgb(7, 0, 0));
+Check(recentColors.Count == 6 && recentColors[0] == Color.FromRgb(7, 0, 0) && recentColors.Distinct().Count() == 6,
+    "Reused recent color moves to front without duplication");
 var fitted = AppLimits.FitResolution(7680, 4320);
 Check(fitted.Width == 3840 && fitted.Height == 2160, "Oversized current display is safely scaled");
 var capped = DataSources.LimitValue(new string('x', AppLimits.MaxResolvedValueCharacters + 100));

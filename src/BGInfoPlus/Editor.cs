@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using System.IO;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
@@ -19,10 +20,15 @@ internal sealed class Editor : Window
     private readonly RichTextBox editor = new() { AcceptsTab = true, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, BorderThickness = new Thickness(0) };
     private readonly ListBox placeholders = new() { MinHeight = 120 };
     private readonly TextBlock status = new() { Foreground = UITheme.SecondaryTextBrush, TextWrapping = TextWrapping.Wrap };
-    private readonly CheckBox runAtSignIn = new() { Content = "Always apply at login", Foreground = UITheme.TextBrush, IsChecked = true, Margin = new Thickness(8, 8, 0, 0) };
+    private readonly CheckBox runAtSignIn = new() { Content = "Always apply at login", Foreground = UITheme.TextBrush, IsChecked = false, Margin = new Thickness(8, 8, 0, 0) };
     private readonly ComboBox resolutions = new() { Width = 170, Height = 34, Margin = new Thickness(0, 0, 10, 0), VerticalContentAlignment = VerticalAlignment.Center, Padding = new Thickness(8, 0, 4, 0) };
     private readonly List<DisplayResolution> availableResolutions = [];
     private readonly List<PlaceholderDefinition> definitions = [];
+    private readonly List<Color> recentColors = [];
+    private readonly StackPanel recentFontColors = new() { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+    private readonly StackPanel recentWallpaperColors = new() { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+    private ComboBox? fontSizeControl;
+    private double currentFontSize = 24;
     private Color wallpaperColor = Color.FromRgb(15, 23, 42);
     private readonly Border wallpaperColorSwatch = new() { Width = 15, Height = 15, BorderBrush = Brushes.Black, BorderThickness = new Thickness(1) };
     private readonly Border fontColorSwatch = new() { Width = 15, Height = 4, Background = Brushes.White, BorderBrush = Brushes.Black, BorderThickness = new Thickness(0.5) };
@@ -107,21 +113,102 @@ internal sealed class Editor : Window
         var sizes = new ComboBox
         {
             ItemsSource = new[] { 12, 16, 20, 24, 28, 32, 40, 48, 64 }, SelectedItem = 24,
+            IsEditable = true, IsTextSearchEnabled = false, Text = "24",
             Width = 68, Height = 32, ToolTip = "Font size", VerticalContentAlignment = VerticalAlignment.Center,
             HorizontalContentAlignment = HorizontalAlignment.Left, Padding = new Thickness(8, 0, 4, 0)
         };
-        sizes.SelectionChanged += (_, _) => { if (sizes.SelectedItem is int size) editor.Selection.ApplyPropertyValue(TextElement.FontSizeProperty, (double)size); editor.Focus(); };
+        fontSizeControl = sizes;
+        sizes.SelectionChanged += (_, _) => { if (sizes.SelectedItem is int size) CommitFontSize(size.ToString(CultureInfo.CurrentCulture), true); };
+        editor.SelectionChanged += (_, _) =>
+        {
+            var selectedSize = editor.Selection.GetPropertyValue(TextElement.FontSizeProperty);
+            if (selectedSize is double size && size is >= 8 and <= 96)
+            {
+                currentFontSize = size;
+                sizes.Text = size.ToString("0.##", CultureInfo.CurrentCulture);
+            }
+        };
+        sizes.KeyDown += (_, e) =>
+        {
+            if (e.Key != Key.Enter) return;
+            CommitFontSize(sizes.Text, true);
+            e.Handled = true;
+        };
+        sizes.LostKeyboardFocus += (_, _) => CommitFontSize(sizes.Text, false);
         bar.Children.Add(sizes);
         AddToolbarButton(bar, FontColorIcon(), "Font color", ChooseFontColor);
+        bar.Children.Add(recentFontColors);
         AddSeparator(bar);
         wallpaperColorSwatch.Background = new SolidColorBrush(wallpaperColor);
         AddToolbarButton(bar, wallpaperColorSwatch, "Wallpaper color", ChooseWallpaperColor);
+        bar.Children.Add(recentWallpaperColors);
         return new Border
         {
             Child = bar, Background = UITheme.WindowBrush,
             BorderBrush = UITheme.BorderBrush, BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(4), Padding = new Thickness(6), Margin = new Thickness(0, 0, 0, 10)
         };
+    }
+
+    private void CommitFontSize(string text, bool returnFocus)
+    {
+        if (!TryParseFontSize(text, out var size))
+        {
+            status.Text = "Font size must be between 8 and 96 points.";
+            if (fontSizeControl is not null)
+                fontSizeControl.Text = currentFontSize.ToString("0.##", CultureInfo.CurrentCulture);
+            return;
+        }
+
+        currentFontSize = size;
+        if (fontSizeControl is not null)
+            fontSizeControl.Text = currentFontSize.ToString("0.##", CultureInfo.CurrentCulture);
+        editor.Selection.ApplyPropertyValue(TextElement.FontSizeProperty, size);
+        if (returnFocus) editor.Focus();
+    }
+
+    internal static bool TryParseFontSize(string text, out double size) =>
+        double.TryParse(text, NumberStyles.AllowDecimalPoint, CultureInfo.CurrentCulture, out size) &&
+        double.IsFinite(size) && size is >= 8 and <= 96;
+
+    private void AddRecentColor(Color color)
+    {
+        AddRecentColorToHistory(recentColors, color);
+        RefreshRecentColorButtons();
+    }
+
+    internal static void AddRecentColorToHistory(List<Color> colors, Color color)
+    {
+        colors.Remove(color);
+        colors.Insert(0, color);
+        if (colors.Count > 6) colors.RemoveRange(6, colors.Count - 6);
+    }
+
+    private void RefreshRecentColorButtons()
+    {
+        recentFontColors.Children.Clear();
+        recentWallpaperColors.Children.Clear();
+        foreach (var color in recentColors)
+        {
+            recentFontColors.Children.Add(RecentColorButton(color, "font color", ApplyFontColor));
+            recentWallpaperColors.Children.Add(RecentColorButton(color, "wallpaper color", ApplyWallpaperColor));
+        }
+    }
+
+    private static Button RecentColorButton(Color color, string target, Action<Color> apply)
+    {
+        var button = new Button
+        {
+            Content = new Border
+            {
+                Width = 15, Height = 15, Background = new SolidColorBrush(color),
+                BorderBrush = Brushes.Black, BorderThickness = new Thickness(1)
+            },
+            Width = 24, Height = 24, Padding = new Thickness(2), Margin = new Thickness(0, 0, 2, 0),
+            ToolTip = $"Apply {ColorText(color)} as {target}"
+        };
+        button.Click += (_, _) => apply(color);
+        return button;
     }
 
     private void AddCommandButton(Panel panel, UIElement icon, string tooltip, RoutedUICommand command)
@@ -218,15 +305,28 @@ internal sealed class Editor : Window
         var current = editor.Selection.GetPropertyValue(TextElement.ForegroundProperty) as SolidColorBrush;
         var selected = ShowColorDialog(current?.Color ?? Colors.White);
         if (selected is not Color color) return;
-        var brush = new SolidColorBrush(color);
-        editor.Selection.ApplyPropertyValue(TextElement.ForegroundProperty, brush);
-        fontColorSwatch.Background = brush; editor.Focus();
+        AddRecentColor(color);
+        ApplyFontColor(color);
     }
 
     private void ChooseWallpaperColor()
     {
         var selected = ShowColorDialog(wallpaperColor);
         if (selected is not Color color) return;
+        AddRecentColor(color);
+        ApplyWallpaperColor(color);
+    }
+
+    private void ApplyFontColor(Color color)
+    {
+        var brush = new SolidColorBrush(color);
+        editor.Selection.ApplyPropertyValue(TextElement.ForegroundProperty, brush);
+        fontColorSwatch.Background = brush;
+        editor.Focus();
+    }
+
+    private void ApplyWallpaperColor(Color color)
+    {
         wallpaperColor = color;
         var brush = new SolidColorBrush(wallpaperColor);
         wallpaperColorSwatch.Background = brush; editor.Background = brush; UpdateEditorContrast();
@@ -310,6 +410,7 @@ internal sealed class Editor : Window
             start.ArgumentList.Add("-NoLogo"); start.ArgumentList.Add("-NoProfile");
             start.ArgumentList.Add("-ExecutionPolicy"); start.ArgumentList.Add("Bypass");
             start.ArgumentList.Add("-File"); start.ArgumentList.Add(script);
+            start.ArgumentList.Add("-PauseOnError");
             status.Text = "Waiting for the elevated all-users deployment…";
             using var process = Process.Start(start) ?? throw new InvalidOperationException("The deployment helper could not be started.");
             await process.WaitForExitAsync();
