@@ -32,7 +32,12 @@ $publishedExe = Join-Path $publishRoot 'BGInfoPlus.exe'
 $publishedVersion = (Get-Item -LiteralPath $publishedExe).VersionInfo.FileVersion
 if ($publishedVersion -ne "$Version.0") { throw "Published file version is $publishedVersion, expected $Version.0." }
 $defaultConfiguration = Join-Path $releaseRoot 'BGInfoPlus-DefaultConfig.json'
-& $publishedExe --export-default-config $defaultConfiguration
+$exportProcess = Start-Process -FilePath $publishedExe `
+    -ArgumentList @('--export-default-config', "`"$defaultConfiguration`"") `
+    -Wait -PassThru -WindowStyle Hidden
+if ($exportProcess.ExitCode -ne 0) {
+    throw "Default BGInfoPlus configuration export failed with exit code $($exportProcess.ExitCode)."
+}
 if (-not (Test-Path -LiteralPath $defaultConfiguration -PathType Leaf)) {
     throw 'The default BGInfoPlus configuration was not created.'
 }
@@ -51,6 +56,7 @@ $installerProject = Join-Path $repositoryRoot 'packaging\standalone-installer\BG
 $standaloneMsi = Join-Path $releaseRoot "BGInfoPlus-$Version-win-x64.msi"
 & dotnet build $installerProject -c Release -p:ProductVersion=$Version -p:PublishDirectory=$publishRoot -p:RepositoryRoot=$repositoryRoot -p:OutputName="BGInfoPlus-$Version-win-x64" -o $releaseRoot
 if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $standaloneMsi -PathType Leaf)) { throw 'MSI build failed.' }
+Remove-Item -LiteralPath (Join-Path $releaseRoot "BGInfoPlus-$Version-win-x64.wixpdb") -Force -ErrorAction SilentlyContinue
 
 $standaloneExe = Join-Path $releaseRoot "BGInfoPlus-$Version-win-x64.exe"
 Copy-Item -LiteralPath $publishedExe -Destination $standaloneExe
