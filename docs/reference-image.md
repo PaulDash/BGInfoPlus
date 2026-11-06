@@ -66,9 +66,7 @@ Close BGInfoPlus and run Sysprep interactively from an elevated administrator co
 %WINDIR%\System32\Sysprep\Sysprep.exe /generalize /oobe /shutdown
 ```
 
-Add `/unattend:C:\path\to\unattend.xml` when your image process uses an answer file. Do not restart and sign into the generalized reference VM before capturing it. Capture the stopped VM or disk using your normal image workflow.
-
-Do not run Sysprep as SYSTEM through Task Scheduler or PsExec. Microsoft documents that scenario as unsupported.
+Capture the stopped VM or disk using your normal image workflow.
 
 ## 5. First boot from the image
 

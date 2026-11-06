@@ -6,7 +6,13 @@ BGInfoPlus is distributed as a machine-wide MSI, a portable ZIP, and a standalon
 
 The editor stores the current user's design under `HKCU\Software\BGInfoPlus`. **Always apply at login** is opt-in; selecting it and applying the design registers the current executable in the user's Windows `Run` key. At sign-in, BGInfoPlus refreshes the wallpaper without opening the editor. Clear the option and apply again to remove the entry.
 
-For shared systems, **Deploy for all users…** writes a protected template to `%ProgramData%\BGInfoPlus\config.json` and registers a delayed Task Scheduler task for interactive logons. Each user gets a separately rendered wallpaper under `%LOCALAPPDATA%`. MSI removal deletes the shared task and template while preserving per-user configurations and wallpapers. For reference image preparation, follow [Preparing a reference image](reference-image.md).
+For shared systems, **Deploy for all users…** writes a protected template to `%ProgramData%\BGInfoPlus\config.json` and registers a delayed Task Scheduler task for interactive logons. Each user gets a separately rendered wallpaper under `%LOCALAPPDATA%`.
+
+For reference image preparation, follow [Preparing a reference image](reference-image.md).
+
+## Uninstall
+
+MSI removal deletes the shared task and template while preserving per-user configurations and wallpapers.
 
 ## Build and Release
 
@@ -60,6 +66,4 @@ Only one version of a given VM Application can be assigned to a VM at a time. Th
 - Generated wallpaper: `%LOCALAPPDATA%\BGInfoPlus\wallpaper.bmp`.
 - Automatic-apply log: `%LOCALAPPDATA%\BGInfoPlus\BGInfoPlus.log`.
 
-Automatic-apply failures are logged and return a nonzero exit code. An interactive all-users deployment leaves the PowerShell window open after an error; Azure VM Application operations remain noninteractive and report command output through the VM Application logs.
-
-Rendering is limited to 3840 × 2160. UserData accepts UTF-8 JSON or Base64-encoded UTF-8 JSON, is read but never executed, and is limited to 256 KiB, 256 scalar values, and 4,096 characters per value. Windows wallpaper-fit settings and administrator policy still control how the generated image is displayed or whether it can be applied.
+Automatic-apply failures are logged and return a nonzero exit code.
