@@ -45,7 +45,7 @@ dotnet run --project tests/BGInfoPlus.Tests -c Release
 
 Rendering is limited to 3840 × 2160. Azure UserData accepts UTF-8 JSON or Base64-encoded UTF-8 JSON, is read but never executed, and is limited to 256 KiB, 256 scalar values, and 4,096 characters per value.
 
-Administrator policy can prevent the generated image from being applied. BGInfoPlus supports the Windows Fill, Fit, and Stretch modes; span, tile, slideshow, and per-monitor wallpaper layouts are not editor options.
+Administrator policy can prevent the generated image from being applied. BGInfoPlus generates Picture backgrounds with Windows Fill, Fit, or Stretch. The launch-time undo also remembers and restores pre-existing Solid color, Slideshow, Windows spotlight, and per-monitor Picture states.
 
 ## Copyright
 

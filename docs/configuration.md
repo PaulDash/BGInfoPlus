@@ -27,7 +27,7 @@ The Default scope is application behavior, not a modification of `C:\Users\Defau
 
 Open the editor and select **Apply now**. BGInfoPlus atomically saves `%LOCALAPPDATA%\BGInfoPlus\config.json` and applies it. If **Always apply at login** is selected, BGInfoPlus creates `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\BGInfoPlus.lnk`. Clearing the option and applying again removes that shortcut.
 
-When the editor opens, it remembers the signed-in user's current wallpaper path and the raw Windows `WallpaperStyle` and `TileWallpaper` values in memory. Hold **Alt** while selecting **Apply now** to restore that launch-time wallpaper configuration. This is a session-only undo: the snapshot is not written to disk, and it is unavailable if Windows prevented BGInfoPlus from reading the settings at launch.
+When the editor opens, it remembers the signed-in user's current Personalization background mode in memory. The snapshot covers Picture (including per-monitor paths and positioning), Solid color, Slideshow (source items, interval, shuffle, and positioning), and Windows spotlight (the mode selector and current image). Hold **Alt** while selecting **Apply now** to restore that launch-time wallpaper configuration. This is a session-only undo: the snapshot is not written to disk, and it is unavailable if Windows prevented BGInfoPlus from reading the settings at launch.
 
 The executable path is stored in the shortcut, so a portable installation must remain at a stable path.
 

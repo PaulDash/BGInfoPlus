@@ -36,10 +36,11 @@ internal sealed class Editor : Window
     public Editor()
     {
         launchWallpaperConfiguration = WallpaperService.CaptureCurrentConfiguration();
-        var availableHeight = Math.Max(620, SystemParameters.WorkArea.Height - 48);
-        Title = "BGInfoPlus"; Width = 1180; Height = Math.Min(900, availableHeight); MinWidth = 1080; MinHeight = 620;
+        var availableHeight = Math.Max(620, SystemParameters.WorkArea.Height - 16);
+        Title = "BGInfoPlus"; Width = 1180; Height = Math.Min(1000, availableHeight); MinWidth = 1080; MinHeight = 620;
         Icon = ApplicationIcon.Create();
         UITheme.Apply(this);
+        Closed += (_, _) => launchWallpaperConfiguration?.Dispose();
         PopulateResolutions();
         var root = new DockPanel { Margin = new Thickness(24, 20, 24, 20) }; Content = root;
         var header = new Grid { Margin = new Thickness(4, 0, 4, 20) };
@@ -109,8 +110,13 @@ internal sealed class Editor : Window
         return new Border
         {
             Background = UITheme.CardBrush, BorderBrush = UITheme.BorderBrush, BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(8), Padding = new Thickness(16),
-            Child = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto }
+            CornerRadius = new CornerRadius(8),
+            Child = new ScrollViewer
+            {
+                Content = panel, Padding = new Thickness(16),
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled
+            }
         };
     }
 
@@ -260,17 +266,25 @@ internal sealed class Editor : Window
     private void PopulateResolutions()
     {
         var current = ScreenResolution.Current;
-        availableResolutions.Add(current);
-        foreach (var (width, height) in new[]
+        var builtIn = new[]
         {
             (800, 600), (1024, 768), (1152, 864), (1280, 720), (1280, 768), (1280, 800),
             (1280, 960), (1280, 1024), (1360, 768), (1366, 768), (1400, 1050), (1440, 900),
             (1600, 900), (1600, 1200), (1680, 1050), (1920, 1080), (1920, 1200)
-        })
-            if (width != current.Width || height != current.Height) availableResolutions.Add(new DisplayResolution(width, height));
+        }.Select(item => new DisplayResolution(item.Item1, item.Item2));
+        availableResolutions.AddRange(SortResolutions(current, builtIn));
         resolutions.ItemsSource = availableResolutions;
-        resolutions.SelectedIndex = 0;
+        resolutions.SelectedItem = current;
     }
+
+    internal static IReadOnlyList<DisplayResolution> SortResolutions(DisplayResolution current, IEnumerable<DisplayResolution> builtIn) =>
+        builtIn.Prepend(current)
+            .GroupBy(item => (item.Width, item.Height))
+            .Select(group => group.First()) // Prepend ensures a matching Current entry wins de-duplication.
+            .OrderByDescending(item => (long)item.Width * item.Height)
+            .ThenByDescending(item => item.Width)
+            .ThenByDescending(item => item.Height)
+            .ToArray();
 
     internal static string AspectRatioText(int width, int height)
     {
@@ -527,7 +541,7 @@ internal sealed class Editor : Window
             runAtSignIn.ToolTip = null;
         }
         wallpaperColor = ParseColor(configuration.BackgroundColor, wallpaperColor);
-        var selectedResolution = availableResolutions[0];
+        var selectedResolution = availableResolutions.First(item => item.Description == "Current");
         if (!selectCurrentResolution)
         {
             selectedResolution = availableResolutions.FirstOrDefault(r => r.Width == configuration.ImageWidth && r.Height == configuration.ImageHeight)!;

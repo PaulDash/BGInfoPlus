@@ -102,6 +102,17 @@ RunSta(() =>
     Check(unsafeRenderRejected, "Renderer rejects unsafe dimensions before allocation");
 });
 
+// Opt-in because desktop COM state is unavailable to some headless build agents.
+if (Environment.GetEnvironmentVariable("BGINFOPLUS_TEST_DESKTOP") == "1")
+{
+    RunSta(() =>
+    {
+        using var snapshot = WallpaperService.CaptureCurrentConfiguration();
+        Check(snapshot is not null && Enum.IsDefined(snapshot.Kind),
+            "The interactive Windows wallpaper state can be captured");
+    });
+}
+
 Check(AppLimits.IsValidResolution(1920, 1080), "Common resolution accepted");
 Check(AppLimits.IsValidResolution(3840, 2160), "Maximum resolution accepted");
 Check(!AppLimits.IsValidResolution(4096, 2160), "Oversized resolution rejected");
@@ -117,9 +128,26 @@ Check(Editor.AspectRatioText(1366, 768) == "16:9", "Near-standard display resolu
 Check(Editor.AspectRatioText(1680, 1050) == "16:10", "Display aspect ratio uses conventional notation");
 Check(Editor.AspectRatioText(1280, 1024) == "5:4", "Non-widescreen aspect ratio is reduced");
 Check(Editor.AspectRatioText(0, 1080) == string.Empty, "Invalid aspect ratio dimensions are not displayed");
+var currentResolution = new DisplayResolution(1366, 768, "Current");
+var sortedResolutions = Editor.SortResolutions(currentResolution,
+    [new DisplayResolution(800, 600), new DisplayResolution(1920, 1080), new DisplayResolution(1366, 768)]);
+Check(sortedResolutions.Select(item => (item.Width, item.Height)).SequenceEqual([(1920, 1080), (1366, 768), (800, 600)]),
+    "Resolutions are sorted from highest to lowest pixel count");
+Check(ReferenceEquals(sortedResolutions[1], currentResolution) && sortedResolutions.Count == 3,
+    "Current resolution keeps its sorted position and replaces a matching built-in entry");
 Check(WallpaperService.FitRegistryValues(WallpaperFit.Fill) == ("10", "0"), "Fill maps to Windows wallpaper settings");
 Check(WallpaperService.FitRegistryValues(WallpaperFit.Fit) == ("6", "0"), "Fit maps to Windows wallpaper settings");
 Check(WallpaperService.FitRegistryValues(WallpaperFit.Stretch) == ("2", "0"), "Stretch maps to Windows wallpaper settings");
+Check(WallpaperService.DetermineBackgroundKind(0, 0, true) == PersonalizationBackgroundKind.Picture,
+    "Picture personalization mode is recognized");
+Check(WallpaperService.DetermineBackgroundKind(1, 0, false) == PersonalizationBackgroundKind.SolidColor,
+    "Solid-color personalization mode is recognized");
+Check(WallpaperService.DetermineBackgroundKind(2, DesktopSlideshowState.DisabledByRemoteSession, true) == PersonalizationBackgroundKind.Slideshow,
+    "Slideshow personalization mode remains recognized in a remote session");
+Check(WallpaperService.DetermineBackgroundKind(3, 0, true) == PersonalizationBackgroundKind.WindowsSpotlight,
+    "Windows Spotlight personalization mode is recognized");
+Check(WallpaperService.DetermineBackgroundKind(null, DesktopSlideshowState.Slideshow, true) == PersonalizationBackgroundKind.Slideshow,
+    "Desktop API slideshow state is used when the Personalization selector is unavailable");
 var customPalette = new NativeColorPalette();
 var customColorBuffer = System.Runtime.InteropServices.Marshal.AllocHGlobal(NativeColorPalette.ColorCount * sizeof(int));
 try
