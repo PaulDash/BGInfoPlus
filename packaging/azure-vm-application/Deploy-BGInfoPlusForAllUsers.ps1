@@ -1,17 +1,14 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-Installs or removes a machine-scoped BGInfoPlus JSON configuration and logon task.
+Installs or removes an enforced machine BGInfoPlus configuration and logon task.
 
 .DESCRIPTION
-Default scope supplies a fallback only when a user has no private configuration.
-AllUsers scope is enforced and takes precedence over every private configuration.
-Both modes use the same interactive logon task and validated JSON format.
+The optional application-local DefaultConfig.json supplies the fallback. This
+helper manages only the enforced ProgramData configuration and interactive task.
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet('Default', 'AllUsers')]
-    [string]$Scope = 'AllUsers',
     [switch]$Remove,
     [string]$TemplatePath,
     [switch]$PreserveConfiguration,
@@ -62,14 +59,15 @@ $installDirectory = [IO.Path]::GetFullPath($PSScriptRoot)
 $executable = Join-Path $installDirectory 'BGInfoPlus.exe'
 $dataDirectory = Join-Path $env:ProgramData 'BGInfoPlus'
 $allUsersPath = Join-Path $dataDirectory 'config.json'
-$defaultPath = Join-Path $dataDirectory 'default-config.json'
-$configurationPath = if ($Scope -eq 'Default') { $defaultPath } else { $allUsersPath }
-$managedHashPath = Join-Path $dataDirectory (if ($Scope -eq 'Default') { 'default-config.source.sha256' } else { 'config.source.sha256' })
+$configurationPath = $allUsersPath
+$managedHashPath = Join-Path $dataDirectory 'config.source.sha256'
+$applicationDefaultPath = Join-Path $installDirectory 'DefaultConfig.json'
+$legacyDefaultPath = Join-Path $dataDirectory 'default-config.json'
+$legacyDefaultHashPath = Join-Path $dataDirectory 'default-config.source.sha256'
 
 if ($Remove) {
     Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
-    foreach ($path in @($allUsersPath, $defaultPath, (Join-Path $dataDirectory 'config.source.sha256'),
-            (Join-Path $dataDirectory 'default-config.source.sha256'))) {
+    foreach ($path in @($allUsersPath, $managedHashPath, $legacyDefaultPath, $legacyDefaultHashPath)) {
         Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
     }
     Write-Host 'The BGInfoPlus machine logon deployment was removed.'
@@ -78,6 +76,9 @@ if ($Remove) {
 
 if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) { throw "BGInfoPlus was not found at $executable." }
 [IO.Directory]::CreateDirectory($dataDirectory) | Out-Null
+# Versions before 1.2.2 stored the fallback in ProgramData. It is no longer a
+# configuration source, so remove it when registering or updating deployment.
+Remove-Item -LiteralPath $legacyDefaultPath, $legacyDefaultHashPath -Force -ErrorAction SilentlyContinue
 
 if ($TemplatePath) {
     $source = [IO.Path]::GetFullPath($TemplatePath)
@@ -103,15 +104,15 @@ if ($TemplatePath) {
     }
     (Get-FileHash -LiteralPath $configurationPath -Algorithm SHA256).Hash |
         Set-Content -LiteralPath $managedHashPath -Encoding ascii
-} elseif (-not (Test-Path -LiteralPath $allUsersPath) -and -not (Test-Path -LiteralPath $defaultPath)) {
-    throw 'No existing machine BGInfoPlus configuration was found to preserve.'
+} elseif (-not (Test-Path -LiteralPath $allUsersPath) -and -not (Test-Path -LiteralPath $applicationDefaultPath)) {
+    throw 'No enforced configuration or application-local DefaultConfig.json was found to use at logon.'
 }
 
 # Administrators and SYSTEM may modify templates; ordinary users can only read them.
 & icacls.exe $dataDirectory /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)(F)' '*S-1-5-32-544:(OI)(CI)(F)' '*S-1-5-32-545:(OI)(CI)(RX)' /T /C | Out-Null
 if ($LASTEXITCODE -ne 0) { throw 'Could not secure the BGInfoPlus machine configuration directory.' }
 
-# The executable resolves AllUsers > User > Default on every run. Keeping the task
+# The executable resolves AllUsers > User > application-local Default on every run. Keeping the task
 # action path-free allows administrators to switch scope without recreating the task.
 $task = New-BGInfoPlusLogonTask $executable $installDirectory
 Register-ScheduledTask -TaskName $taskName -InputObject $task -Force | Out-Null
@@ -122,9 +123,7 @@ Remove-ItemProperty -LiteralPath 'HKCU:\Software\Microsoft\Windows\CurrentVersio
 Remove-Item -LiteralPath (Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Startup\BGInfoPlus.lnk') `
     -Force -ErrorAction SilentlyContinue
 
-Write-Host "$Scope configuration: $configurationPath"
+if (Test-Path -LiteralPath $configurationPath) { Write-Host "AllUsers configuration: $configurationPath" }
+else { Write-Host "Application fallback: $applicationDefaultPath" }
 Write-Host "Scheduled task: $taskName"
-if ($Scope -eq 'Default' -and (Test-Path -LiteralPath $allUsersPath)) {
-    Write-Warning 'An AllUsers configuration also exists and takes precedence over this default.'
-}
 Write-Host 'BGInfoPlus will apply the effective configuration 10 seconds after each interactive logon.'

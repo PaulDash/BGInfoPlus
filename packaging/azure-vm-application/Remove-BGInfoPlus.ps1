@@ -43,7 +43,7 @@ Get-CimInstance -ClassName Win32_UserProfile -ErrorAction SilentlyContinue |
         Remove-Item -LiteralPath $shortcut -Force -ErrorAction SilentlyContinue
     }
 
-foreach ($fileName in @('BGInfoPlus.exe', 'BGInfoPlus.exe.new', 'BGInfoPlus.exe.previous', 'Remove-BGInfoPlus.ps1', 'Deploy-BGInfoPlusForAllUsers.ps1')) {
+foreach ($fileName in @('BGInfoPlus.exe', 'BGInfoPlus.exe.new', 'BGInfoPlus.exe.previous', 'DefaultConfig.json', 'Remove-BGInfoPlus.ps1', 'Deploy-BGInfoPlusForAllUsers.ps1')) {
     Remove-Item -LiteralPath (Join-Path $installDirectory $fileName) -Force -ErrorAction SilentlyContinue
 }
 Remove-Item -LiteralPath $installDirectory -Force -ErrorAction SilentlyContinue

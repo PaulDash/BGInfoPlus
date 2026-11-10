@@ -112,12 +112,27 @@ var decimalFontSizeText = 24.5.ToString(CultureInfo.CurrentCulture);
 Check(Editor.TryParseFontSize(decimalFontSizeText, out var decimalFontSize) && decimalFontSize == 24.5, "Decimal font size accepted");
 foreach (var invalidSize in new[] { "", "7.99", "96.01", "NaN", "Infinity", "invalid" })
     Check(!Editor.TryParseFontSize(invalidSize, out _), "Invalid font size rejected: " + invalidSize);
-var recentColors = new List<Color>();
-for (byte value = 0; value < 8; value++) Editor.AddRecentColorToHistory(recentColors, Color.FromRgb(value, 0, 0));
-Check(recentColors.Count == 6 && recentColors[0] == Color.FromRgb(7, 0, 0), "Recent color history is capped and newest-first");
-Editor.AddRecentColorToHistory(recentColors, Color.FromRgb(7, 0, 0));
-Check(recentColors.Count == 6 && recentColors[0] == Color.FromRgb(7, 0, 0) && recentColors.Distinct().Count() == 6,
-    "Reused recent color moves to front without duplication");
+var customPalette = new NativeColorPalette();
+var customColorBuffer = System.Runtime.InteropServices.Marshal.AllocHGlobal(NativeColorPalette.ColorCount * sizeof(int));
+try
+{
+    customPalette.CopyTo(customColorBuffer);
+    Check(customPalette.Snapshot().All(value => value == 0x00FFFFFF), "Native custom color palette starts with 16 white slots");
+    var customColor = Color.FromRgb(0x12, 0x34, 0x56);
+    var customColorRef = unchecked((int)NativeColorDialog.ToColorRef(customColor));
+    System.Runtime.InteropServices.Marshal.WriteInt32(customColorBuffer, 3 * sizeof(int), customColorRef);
+    customPalette.CopyFrom(customColorBuffer); // Simulate the first dialog adding a custom color.
+    System.Runtime.InteropServices.Marshal.WriteInt32(customColorBuffer, 3 * sizeof(int), 0);
+    customPalette.CopyTo(customColorBuffer);   // Simulate opening the other color selector.
+    Check(System.Runtime.InteropServices.Marshal.ReadInt32(customColorBuffer, 3 * sizeof(int)) == customColorRef,
+        "A custom color remains available to the next font or wallpaper dialog");
+    Check(NativeColorDialog.FromColorRef(unchecked((uint)customColorRef)) == customColor,
+        "Native COLORREF encoding preserves RGB channel order");
+}
+finally
+{
+    System.Runtime.InteropServices.Marshal.FreeHGlobal(customColorBuffer);
+}
 var fitted = AppLimits.FitResolution(7680, 4320);
 Check(fitted.Width == 3840 && fitted.Height == 2160, "Oversized current display is safely scaled");
 var capped = DataSources.LimitValue(new string('x', AppLimits.MaxResolvedValueCharacters + 100));
@@ -143,7 +158,10 @@ Check(!ConfigurationFileStore.Load(configurationPath).RunAtSignIn, "A portable o
 
 var userConfigurationPath = Path.Combine(configurationDirectory, "user.json");
 var allUsersConfigurationPath = Path.Combine(configurationDirectory, "all-users.json");
-var defaultConfigurationPath = Path.Combine(configurationDirectory, "default.json");
+var defaultConfigurationPath = Path.Combine(configurationDirectory, "DefaultConfig.json");
+Check(Path.GetFileName(ConfigurationStore.DefaultPath) == "DefaultConfig.json" &&
+      Path.GetDirectoryName(ConfigurationStore.DefaultPath) == Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory),
+    "Default configuration path is beside the application executable");
 ConfigurationFileStore.Save(userConfigurationPath, sharedConfiguration with { BackgroundColor = "#111111" });
 ConfigurationFileStore.SaveShared(allUsersConfigurationPath, sharedConfiguration with { BackgroundColor = "#222222" });
 ConfigurationFileStore.SaveShared(defaultConfigurationPath, sharedConfiguration with { BackgroundColor = "#333333" });
@@ -155,10 +173,10 @@ Check(automaticResolution?.Scope == ConfigurationScope.AllUsers && automaticReso
     "Automatic resolution enforces the all-users configuration first");
 File.Delete(allUsersConfigurationPath);
 automaticResolution = ConfigurationResolver.ResolveForAutomaticApply(userConfigurationPath, allUsersConfigurationPath, defaultConfigurationPath);
-Check(automaticResolution?.Scope == ConfigurationScope.User, "Automatic resolution uses a personal configuration before the default");
+Check(automaticResolution?.Scope == ConfigurationScope.User, "Automatic resolution uses a personal configuration before the application default");
 File.Delete(userConfigurationPath);
 automaticResolution = ConfigurationResolver.ResolveForAutomaticApply(userConfigurationPath, allUsersConfigurationPath, defaultConfigurationPath);
-Check(automaticResolution?.Scope == ConfigurationScope.Default, "Automatic resolution falls back to the machine default for a new user");
+Check(automaticResolution?.Scope == ConfigurationScope.Default, "Automatic resolution falls back to the application-local default for a new user");
 File.WriteAllText(allUsersConfigurationPath, "{broken}");
 var invalidPolicyRejected = false;
 try { ConfigurationResolver.ResolveForAutomaticApply(userConfigurationPath, allUsersConfigurationPath, defaultConfigurationPath); }

@@ -126,7 +126,7 @@ if (-not (Test-Path -LiteralPath $defaultPackage)) {
 }
 $packagePath = [IO.Path]::GetFullPath((Read-Required 'VM Application ZIP path' $defaultPackage))
 if (-not (Test-Path -LiteralPath $packagePath -PathType Leaf)) { throw "Package not found: $packagePath" }
-$configurationPath = Join-Path ([IO.Path]::GetDirectoryName($packagePath)) 'BGInfoPlus-DefaultConfig.json'
+$configurationPath = Join-Path ([IO.Path]::GetDirectoryName($packagePath)) 'DefaultConfig.json'
 if (-not (Test-Path -LiteralPath $configurationPath -PathType Leaf)) {
     throw "The default configuration artifact was not found at $configurationPath. Rebuild the release package."
 }

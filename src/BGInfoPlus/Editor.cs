@@ -25,14 +25,10 @@ internal sealed class Editor : Window
     private readonly List<DisplayResolution> availableResolutions = [];
     private readonly List<PlaceholderDefinition> definitions = [];
     private ConfigurationScope loadedScope = ConfigurationScope.BuiltIn;
-    private readonly List<Color> recentColors = [];
-    private readonly StackPanel recentFontColors = new() { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-    private readonly StackPanel recentWallpaperColors = new() { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+    private readonly NativeColorPalette customColorPalette = new();
     private ComboBox? fontSizeControl;
     private double currentFontSize = 24;
     private Color wallpaperColor = Color.FromRgb(15, 23, 42);
-    private readonly Border wallpaperColorSwatch = new() { Width = 15, Height = 15, BorderBrush = Brushes.Black, BorderThickness = new Thickness(1) };
-    private readonly Border fontColorSwatch = new() { Width = 15, Height = 4, Background = Brushes.White, BorderBrush = Brushes.Black, BorderThickness = new Thickness(0.5) };
 
     public Editor()
     {
@@ -137,12 +133,9 @@ internal sealed class Editor : Window
         };
         sizes.LostKeyboardFocus += (_, _) => CommitFontSize(sizes.Text, false);
         bar.Children.Add(sizes);
-        AddToolbarButton(bar, FontColorIcon(), "Font color", ChooseFontColor);
-        bar.Children.Add(recentFontColors);
+        AddToolbarButton(bar, FormatIcon("A", FontWeights.SemiBold), "Font color", ChooseFontColor);
         AddSeparator(bar);
-        wallpaperColorSwatch.Background = new SolidColorBrush(wallpaperColor);
-        AddToolbarButton(bar, wallpaperColorSwatch, "Wallpaper color", ChooseWallpaperColor);
-        bar.Children.Add(recentWallpaperColors);
+        AddToolbarButton(bar, FormatIcon("▧", FontWeights.Normal), "Wallpaper color", ChooseWallpaperColor);
         return new Border
         {
             Child = bar, Background = UITheme.WindowBrush,
@@ -172,46 +165,6 @@ internal sealed class Editor : Window
         double.TryParse(text, NumberStyles.AllowDecimalPoint, CultureInfo.CurrentCulture, out size) &&
         double.IsFinite(size) && size is >= 8 and <= 96;
 
-    private void AddRecentColor(Color color)
-    {
-        AddRecentColorToHistory(recentColors, color);
-        RefreshRecentColorButtons();
-    }
-
-    internal static void AddRecentColorToHistory(List<Color> colors, Color color)
-    {
-        colors.Remove(color);
-        colors.Insert(0, color);
-        if (colors.Count > 6) colors.RemoveRange(6, colors.Count - 6);
-    }
-
-    private void RefreshRecentColorButtons()
-    {
-        recentFontColors.Children.Clear();
-        recentWallpaperColors.Children.Clear();
-        foreach (var color in recentColors)
-        {
-            recentFontColors.Children.Add(RecentColorButton(color, "font color", ApplyFontColor));
-            recentWallpaperColors.Children.Add(RecentColorButton(color, "wallpaper color", ApplyWallpaperColor));
-        }
-    }
-
-    private static Button RecentColorButton(Color color, string target, Action<Color> apply)
-    {
-        var button = new Button
-        {
-            Content = new Border
-            {
-                Width = 15, Height = 15, Background = new SolidColorBrush(color),
-                BorderBrush = Brushes.Black, BorderThickness = new Thickness(1)
-            },
-            Width = 24, Height = 24, Padding = new Thickness(2), Margin = new Thickness(0, 0, 2, 0),
-            ToolTip = $"Apply {ColorText(color)} as {target}"
-        };
-        button.Click += (_, _) => apply(color);
-        return button;
-    }
-
     private void AddCommandButton(Panel panel, UIElement icon, string tooltip, RoutedUICommand command)
     {
         var button = new Button
@@ -226,13 +179,6 @@ internal sealed class Editor : Window
     {
         var button = new Button { Content = icon, ToolTip = tooltip, Width = 34, Height = 32, Margin = new Thickness(0, 0, 3, 0), Padding = new Thickness(3) };
         button.Click += (_, _) => action(); panel.Children.Add(button);
-    }
-
-    private UIElement FontColorIcon()
-    {
-        var panel = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
-        panel.Children.Add(new TextBlock { Text = "A", FontSize = 14, FontWeight = FontWeights.SemiBold, Foreground = Brushes.Black, HorizontalAlignment = HorizontalAlignment.Center, LineHeight = 14 });
-        panel.Children.Add(fontColorSwatch); return panel;
     }
 
     private static TextBlock FormatIcon(string text, FontWeight weight, FontStyle? style = null, TextDecorationCollection? decorations = null) => new()
@@ -275,10 +221,10 @@ internal sealed class Editor : Window
         var deploy = new Button { Content = "Deploy for all users…", Height = 34, MinWidth = 156, Margin = new Thickness(8, 0, 0, 0), ToolTip = "Save this design as the machine-wide template and apply it whenever any user signs in" };
         deploy.Click += async (_, _) => await DeployForAllUsersAsync(); Grid.SetColumn(deploy, 4); bar.Children.Add(deploy);
         Grid.SetColumn(runAtSignIn, 2); Grid.SetRow(runAtSignIn, 1); bar.Children.Add(runAtSignIn);
+        var importConfiguration = new Button { Content = "Import config…", Height = 30, MinWidth = 112, Margin = new Thickness(8, 6, 0, 0), ToolTip = "Load a JSON configuration into the editor without saving it" };
+        importConfiguration.Click += (_, _) => ImportConfiguration(); Grid.SetColumn(importConfiguration, 3); Grid.SetRow(importConfiguration, 1); bar.Children.Add(importConfiguration);
         var exportConfiguration = new Button { Content = "Export config…", Height = 30, MinWidth = 112, Margin = new Thickness(8, 6, 0, 0), ToolTip = "Export this editable layout and its placeholder mappings as a JSON configuration" };
-        exportConfiguration.Click += (_, _) => ExportConfiguration(); Grid.SetColumn(exportConfiguration, 3); Grid.SetRow(exportConfiguration, 1); bar.Children.Add(exportConfiguration);
-        var deployDefault = new Button { Content = "Set as default…", Height = 30, MinWidth = 156, Margin = new Thickness(8, 6, 0, 0), ToolTip = "Use this layout for users who do not have a personal configuration" };
-        deployDefault.Click += async (_, _) => await DeployMachineConfigurationAsync(ConfigurationScope.Default); Grid.SetColumn(deployDefault, 4); Grid.SetRow(deployDefault, 1); bar.Children.Add(deployDefault);
+        exportConfiguration.Click += (_, _) => ExportConfiguration(); Grid.SetColumn(exportConfiguration, 4); Grid.SetRow(exportConfiguration, 1); bar.Children.Add(exportConfiguration);
         return bar;
     }
 
@@ -310,7 +256,6 @@ internal sealed class Editor : Window
         var current = editor.Selection.GetPropertyValue(TextElement.ForegroundProperty) as SolidColorBrush;
         var selected = ShowColorDialog(current?.Color ?? Colors.White);
         if (selected is not Color color) return;
-        AddRecentColor(color);
         ApplyFontColor(color);
     }
 
@@ -318,7 +263,6 @@ internal sealed class Editor : Window
     {
         var selected = ShowColorDialog(wallpaperColor);
         if (selected is not Color color) return;
-        AddRecentColor(color);
         ApplyWallpaperColor(color);
     }
 
@@ -326,7 +270,6 @@ internal sealed class Editor : Window
     {
         var brush = new SolidColorBrush(color);
         editor.Selection.ApplyPropertyValue(TextElement.ForegroundProperty, brush);
-        fontColorSwatch.Background = brush;
         editor.Focus();
     }
 
@@ -334,12 +277,12 @@ internal sealed class Editor : Window
     {
         wallpaperColor = color;
         var brush = new SolidColorBrush(wallpaperColor);
-        wallpaperColorSwatch.Background = brush; editor.Background = brush; UpdateEditorContrast();
+        editor.Background = brush; UpdateEditorContrast();
     }
 
     private Color? ShowColorDialog(Color initial)
     {
-        return NativeColorDialog.Show(new WindowInteropHelper(this).Handle, initial);
+        return NativeColorDialog.Show(new WindowInteropHelper(this).Handle, initial, customColorPalette);
     }
 
     private void UpdateEditorContrast()
@@ -392,6 +335,34 @@ internal sealed class Editor : Window
         catch (Exception e) { status.Text = "Configuration could not be exported: " + e.Message; }
     }
 
+    private void ImportConfiguration()
+    {
+        try
+        {
+            var dialog = new OpenFileDialog
+            {
+                Title = "Import BGInfoPlus configuration",
+                DefaultExt = ".json",
+                Filter = "BGInfoPlus configuration|*.json|All files|*.*"
+            };
+            if (dialog.ShowDialog(this) != true) return;
+            var configuration = ConfigurationFileStore.Load(dialog.FileName);
+            var scope = File.Exists(ConfigurationStore.AllUsersPath) ? ConfigurationScope.AllUsers : ConfigurationScope.Explicit;
+            ApplyConfigurationToEditor(configuration, scope);
+            if (scope == ConfigurationScope.AllUsers)
+            {
+                runAtSignIn.IsChecked = true;
+                runAtSignIn.IsEnabled = false;
+                runAtSignIn.Content = "Applied at login by machine task";
+                runAtSignIn.ToolTip = "The installed machine task applies the enforced all-users configuration.";
+            }
+            status.Text = scope == ConfigurationScope.AllUsers
+                ? $"Configuration imported from {dialog.FileName}. It can be previewed, but the enforced all-users configuration still controls login."
+                : $"Configuration imported from {dialog.FileName}. Use Apply wallpaper to save it.";
+        }
+        catch (Exception e) { status.Text = "Configuration could not be imported: " + e.Message; }
+    }
+
     private async Task ExportAsync()
     {
         try
@@ -421,9 +392,9 @@ internal sealed class Editor : Window
         catch (Exception e) { status.Text = "Image could not be exported: " + e.Message; }
     }
 
-    private Task DeployForAllUsersAsync() => DeployMachineConfigurationAsync(ConfigurationScope.AllUsers);
+    private Task DeployForAllUsersAsync() => DeployMachineConfigurationAsync();
 
-    private async Task DeployMachineConfigurationAsync(ConfigurationScope targetScope)
+    private async Task DeployMachineConfigurationAsync()
     {
         string? stagingPath = null;
         try
@@ -441,22 +412,17 @@ internal sealed class Editor : Window
             start.ArgumentList.Add("-NoLogo"); start.ArgumentList.Add("-NoProfile");
             start.ArgumentList.Add("-ExecutionPolicy"); start.ArgumentList.Add("Bypass");
             start.ArgumentList.Add("-File"); start.ArgumentList.Add(script);
-            start.ArgumentList.Add("-Scope"); start.ArgumentList.Add(targetScope == ConfigurationScope.Default ? "Default" : "AllUsers");
             start.ArgumentList.Add("-TemplatePath"); start.ArgumentList.Add(stagingPath);
             start.ArgumentList.Add("-Force");
             start.ArgumentList.Add("-PauseOnError");
-            status.Text = $"Waiting for the elevated {(targetScope == ConfigurationScope.Default ? "default" : "all-users")} deployment…";
+            status.Text = "Waiting for the elevated all-users deployment…";
             using var process = Process.Start(start) ?? throw new InvalidOperationException("The deployment helper could not be started.");
             await process.WaitForExitAsync();
             if (process.ExitCode != 0) throw new InvalidOperationException($"The deployment helper exited with code {process.ExitCode}. See its PowerShell window for details.");
             runAtSignIn.IsChecked = true; runAtSignIn.IsEnabled = false;
             runAtSignIn.Content = "Applied at login by machine task";
-            loadedScope = File.Exists(ConfigurationStore.AllUsersPath) ? ConfigurationScope.AllUsers : targetScope;
-            status.Text = targetScope == ConfigurationScope.Default && loadedScope == ConfigurationScope.AllUsers
-                ? "Default configuration saved, but the existing all-users configuration still takes precedence."
-                : targetScope == ConfigurationScope.Default
-                    ? "Default configuration deployed. Users without a personal configuration will receive it at logon."
-                    : "All-users configuration deployed. BGInfoPlus will enforce it at every user logon.";
+            loadedScope = ConfigurationScope.AllUsers;
+            status.Text = "All-users configuration deployed. BGInfoPlus will enforce it at every user logon.";
         }
         catch (System.ComponentModel.Win32Exception e) when (e.NativeErrorCode == 1223)
         {
@@ -471,29 +437,50 @@ internal sealed class Editor : Window
         try
         {
             var resolved = ConfigurationStore.LoadForEditor();
-            loadedScope = resolved.Scope;
+            ApplyConfigurationToEditor(resolved.Configuration, resolved.Scope);
+            var machineLogon = resolved.Scope == ConfigurationScope.AllUsers;
             var configuration = resolved.Configuration;
-            editor.Document = DocumentTools.Load(configuration.Document); definitions.AddRange(configuration.Placeholders);
-            var machineLogon = resolved.Scope is ConfigurationScope.AllUsers or ConfigurationScope.Default;
             runAtSignIn.IsChecked = machineLogon || configuration.RunAtSignIn;
             runAtSignIn.IsEnabled = !machineLogon;
             runAtSignIn.Content = machineLogon ? "Applied at login by machine task" : "Always apply at login";
             runAtSignIn.ToolTip = machineLogon ? "The installed machine task applies the effective configuration for every interactive user." : null;
-            wallpaperColor = ParseColor(configuration.BackgroundColor, wallpaperColor);
-            var saved = availableResolutions.FirstOrDefault(r => r.Width == configuration.ImageWidth && r.Height == configuration.ImageHeight);
-            if (saved is null) { saved = new DisplayResolution(configuration.ImageWidth, configuration.ImageHeight, "Saved"); availableResolutions.Add(saved); resolutions.Items.Refresh(); }
-            resolutions.SelectedItem = saved;
-            editor.Background = new SolidColorBrush(wallpaperColor); wallpaperColorSwatch.Background = new SolidColorBrush(wallpaperColor); UpdateEditorContrast();
-            RefreshPlaceholderList();
             status.Text = resolved.Scope switch
             {
                 ConfigurationScope.User => $"Loaded your configuration from {resolved.Path}.",
                 ConfigurationScope.AllUsers => $"Loaded the enforced all-users configuration from {resolved.Path}.",
-                ConfigurationScope.Default => $"Loaded the machine default because you do not yet have a personal configuration.",
+                ConfigurationScope.Default => $"Loaded the application default from {resolved.Path} because no personal configuration exists.",
                 _ => "Using the built-in starter configuration."
             };
         }
         catch (Exception e) { editor.Document = DocumentTools.NewDocument(); status.Text = "Configuration could not be loaded: " + e.Message; }
+    }
+
+    private void ApplyConfigurationToEditor(AppConfiguration configuration, ConfigurationScope scope)
+    {
+        AppLimits.Validate(configuration);
+        loadedScope = scope;
+        editor.Document = DocumentTools.Load(configuration.Document);
+        definitions.Clear();
+        definitions.AddRange(configuration.Placeholders);
+        if (scope != ConfigurationScope.AllUsers)
+        {
+            runAtSignIn.IsEnabled = true;
+            runAtSignIn.IsChecked = configuration.RunAtSignIn;
+            runAtSignIn.Content = "Always apply at login";
+            runAtSignIn.ToolTip = null;
+        }
+        wallpaperColor = ParseColor(configuration.BackgroundColor, wallpaperColor);
+        var saved = availableResolutions.FirstOrDefault(r => r.Width == configuration.ImageWidth && r.Height == configuration.ImageHeight);
+        if (saved is null)
+        {
+            saved = new DisplayResolution(configuration.ImageWidth, configuration.ImageHeight, "Imported");
+            availableResolutions.Add(saved);
+            resolutions.Items.Refresh();
+        }
+        resolutions.SelectedItem = saved;
+        editor.Background = new SolidColorBrush(wallpaperColor);
+        UpdateEditorContrast();
+        RefreshPlaceholderList();
     }
 
     private void AddEnvironment()

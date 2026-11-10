@@ -35,11 +35,12 @@ internal static class ConfigurationStore
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "BGInfoPlus", "config.json");
     public static string AllUsersPath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "BGInfoPlus", "config.json");
-    public static string DefaultPath => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "BGInfoPlus", "default-config.json");
+    // The optional fallback travels with the executable. This keeps portable and
+    // installed copies self-contained without creating a second ProgramData scope.
+    public static string DefaultPath => Path.Combine(AppContext.BaseDirectory, "DefaultConfig.json");
 
     // Both UI and automatic paths show/use the same effective design: enforced all-users
-    // policy first, then the user's file, then the machine fallback for unconfigured users.
+    // policy first, then the user's file, then the application-local fallback.
     public static ResolvedConfiguration LoadForEditor()
     {
         MigrateLegacyRegistryConfiguration();
@@ -59,7 +60,7 @@ internal static class ConfigurationStore
         UserStartupRegistration.SetEnabled(configuration.RunAtSignIn);
     }
 
-    public static bool HasMachineLogonConfiguration => File.Exists(AllUsersPath) || File.Exists(DefaultPath);
+    public static bool HasMachineLogonConfiguration => File.Exists(AllUsersPath);
 
     private static void MigrateLegacyRegistryConfiguration()
     {

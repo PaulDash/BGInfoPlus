@@ -12,7 +12,7 @@ C:\Program Files\BGInfoPlus\BGInfoPlus.exe
 
 Do not prepare the image from the standalone EXE because it does not include the all-users deployment helper. Do not place the portable package in a profile or temporary directory; the scheduled task must still be able to find it after Sysprep.
 
-MSI setup provides the editable fallback default and logon task. Azure VM Application setup provides an enforced all-users configuration and the same task. See [Configuration model](configuration.md) and [Installation and Deployment](deployment.md) for precedence, overrides, and update behavior.
+MSI setup places `DefaultConfig.json` beside the executable and registers the logon task. Azure VM Application setup provides an enforced all-users configuration and the same task. See [Configuration model](configuration.md) and [Installation and Deployment](deployment.md) for precedence, overrides, and update behavior.
 
 ## 2. Design and test the wallpaper
 
@@ -28,12 +28,12 @@ Avoid UserData paths or other file references inside the preparation account's p
 
 Choose the desired behavior before generalizing the image:
 
-- Select **Set as default…** if new users should start with the design but may later create their own personal configuration.
+- For an editable starting design, select **Export config…** and copy the exported file to the application directory as `DefaultConfig.json`. MSI setup has already registered the logon task. For a portable installation, run `Deploy-BGInfoPlusForAllUsers.ps1 -PreserveConfiguration` once from an elevated prompt after copying the file.
 - Select **Deploy for all users…** if the design must be enforced for every user. This is normally preferable for consistent student lab desktops.
 
-Approve the elevation prompt. On a new MSI install, the release fallback and task are already provisioned; on a new Azure VM Application install, its release or VM-specific configuration is already enforced. The deployment helper:
+Approve elevation when registering the portable task or deploying enforced policy. On a new MSI install, the release fallback and task are already provisioned; on a new Azure VM Application install, its release or VM-specific configuration is already enforced. The deployment helper:
 
-- writes the validated design to the appropriate ProgramData JSON path;
+- optionally writes the validated design to the enforced ProgramData JSON path;
 - grants ordinary users read-only access to that directory;
 - removes the preparation account's duplicate legacy Run entry or Startup shortcut; and
 - registers **BGInfoPlus - Apply wallpaper at logon** in Task Scheduler.
@@ -58,7 +58,8 @@ Verify the deployment from an elevated PowerShell prompt:
 
 ```powershell
 Get-ScheduledTask -TaskName 'BGInfoPlus - Apply wallpaper at logon' | Get-ScheduledTaskInfo
-Get-ChildItem "$env:ProgramData\BGInfoPlus\*-config.json", "$env:ProgramData\BGInfoPlus\config.json" -ErrorAction SilentlyContinue
+Get-Item "$env:ProgramFiles\BGInfoPlus\DefaultConfig.json" -ErrorAction SilentlyContinue
+Get-Item "$env:ProgramData\BGInfoPlus\config.json" -ErrorAction SilentlyContinue
 ```
 
 For a practical validation, create or use a disposable non-administrator account, sign in, wait approximately ten seconds, and confirm that `%LOCALAPPDATA%\BGInfoPlus\wallpaper.bmp` appears and the wallpaper changes. Review `%LOCALAPPDATA%\BGInfoPlus\BGInfoPlus.log` if it does not.
@@ -79,17 +80,17 @@ Windows specializes the deployed image and completes OOBE according to your prov
 
 1. Windows creates or loads the user's profile.
 2. Task Scheduler waits ten seconds.
-3. BGInfoPlus reads the protected machine-wide template.
+3. BGInfoPlus resolves enforced ProgramData policy, personal configuration, or the application-local fallback in that order.
 4. Placeholders are resolved for the deployed VM and signed-in user.
 5. The image is written to `%LOCALAPPDATA%\BGInfoPlus\wallpaper.bmp` and applied.
 
-The same sequence occurs for every later user. AllUsers takes precedence over a personal file; Default is used only when no personal file exists. Updating either machine scope through the editor changes the effective configuration at subsequent logons.
+The same sequence occurs for every later user. AllUsers takes precedence over a personal file; `DefaultConfig.json` is used only when neither exists. Replacing the local fallback or redeploying AllUsers changes the effective configuration at subsequent logons.
 
 ## Removal or reconfiguration
 
-To replace a machine design, edit it under an administrator account and select **Set as default…** or **Deploy for all users…** again. The existing task and selected template are replaced safely.
+To replace an editable fallback, export the updated design and copy it over the application's `DefaultConfig.json` with administrative permission. To replace enforced policy, select **Deploy for all users…** again.
 
-To remove both machine scopes and the machine logon task while keeping the application installed, run from an elevated PowerShell prompt:
+To remove enforced policy and the machine logon task while keeping the application installed, run from an elevated PowerShell prompt. This does not delete the adjacent `DefaultConfig.json`:
 
 ```powershell
 & "$env:ProgramFiles\BGInfoPlus\Deploy-BGInfoPlusForAllUsers.ps1" -Remove

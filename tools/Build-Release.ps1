@@ -31,7 +31,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Release publish failed.' }
 $publishedExe = Join-Path $publishRoot 'BGInfoPlus.exe'
 $publishedVersion = (Get-Item -LiteralPath $publishedExe).VersionInfo.FileVersion
 if ($publishedVersion -ne "$Version.0") { throw "Published file version is $publishedVersion, expected $Version.0." }
-$defaultConfiguration = Join-Path $releaseRoot 'BGInfoPlus-DefaultConfig.json'
+$defaultConfiguration = Join-Path $releaseRoot 'DefaultConfig.json'
 $exportProcess = Start-Process -FilePath $publishedExe `
     -ArgumentList @('--export-default-config', "`"$defaultConfiguration`"") `
     -Wait -PassThru -WindowStyle Hidden
@@ -66,12 +66,14 @@ Copy-Item -LiteralPath $publishedExe -Destination $standaloneExe
 $portableStage = Join-Path $releaseRoot 'portable'
 [IO.Directory]::CreateDirectory($portableStage) | Out-Null
 Copy-Item -LiteralPath $publishedExe -Destination (Join-Path $portableStage 'BGInfoPlus.exe')
+Copy-Item -LiteralPath $defaultConfiguration -Destination (Join-Path $portableStage 'DefaultConfig.json')
 Copy-Item -LiteralPath (Join-Path $repositoryRoot 'packaging\azure-vm-application\Deploy-BGInfoPlusForAllUsers.ps1') -Destination $portableStage
 Set-Content -LiteralPath (Join-Path $portableStage 'README.txt') -Encoding UTF8 -Value @"
 BGInfoPlus $Version
 
 Run BGInfoPlus.exe to configure, preview, export, and apply the wallpaper.
 No separate .NET runtime is required. Personal configuration is stored in LocalAppData.
+DefaultConfig.json beside the executable is used when no personal configuration exists.
 Use "Deploy for all users" in the editor to create a protected shared template and logon task.
 Documentation: https://github.com/PaulDash/BGInfoPlus
 "@
@@ -81,6 +83,7 @@ Compress-Archive -Path (Join-Path $portableStage '*') -DestinationPath $portable
 $vmStage = Join-Path $releaseRoot 'azure-vmapp'
 [IO.Directory]::CreateDirectory($vmStage) | Out-Null
 Copy-Item -LiteralPath $publishedExe -Destination (Join-Path $vmStage 'BGInfoPlus.exe')
+Copy-Item -LiteralPath $defaultConfiguration -Destination (Join-Path $vmStage 'DefaultConfig.json')
 Copy-Item -LiteralPath (Join-Path $repositoryRoot 'packaging\azure-vm-application\Install-BGInfoPlus.ps1') -Destination $vmStage
 Copy-Item -LiteralPath (Join-Path $repositoryRoot 'packaging\azure-vm-application\Remove-BGInfoPlus.ps1') -Destination $vmStage
 Copy-Item -LiteralPath (Join-Path $repositoryRoot 'packaging\azure-vm-application\Deploy-BGInfoPlusForAllUsers.ps1') -Destination $vmStage

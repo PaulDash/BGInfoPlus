@@ -16,7 +16,7 @@ $expectedFiles = @(
     "BGInfoPlus-$Version-win-x64.msi",
     "BGInfoPlus-$Version-win-x64.zip",
     "BGInfoPlus-$Version-azure-vmapp.zip",
-    'BGInfoPlus-DefaultConfig.json',
+    'DefaultConfig.json',
     'azure-vm-application.json',
     'SHA256SUMS.txt'
 )
@@ -24,7 +24,7 @@ foreach ($name in $expectedFiles) {
     if (-not (Test-Path -LiteralPath (Join-Path $releaseRoot $name) -PathType Leaf)) { throw "Release artifact is missing: $name" }
 }
 
-$defaultConfig = Get-Content -LiteralPath (Join-Path $releaseRoot 'BGInfoPlus-DefaultConfig.json') -Raw |
+$defaultConfig = Get-Content -LiteralPath (Join-Path $releaseRoot 'DefaultConfig.json') -Raw |
     ConvertFrom-Json -ErrorAction Stop
 if ([string]::IsNullOrWhiteSpace($defaultConfig.Document) -or $defaultConfig.Placeholders.Count -lt 1 -or $defaultConfig.RunAtSignIn) {
     throw 'The release default configuration is invalid.'
@@ -39,9 +39,9 @@ function Assert-ZipEntries([string]$path, [string[]]$required) {
     } finally { $archive.Dispose() }
 }
 Assert-ZipEntries (Join-Path $releaseRoot "BGInfoPlus-$Version-win-x64.zip") `
-    @('BGInfoPlus.exe', 'Deploy-BGInfoPlusForAllUsers.ps1', 'README.txt')
+    @('BGInfoPlus.exe', 'DefaultConfig.json', 'Deploy-BGInfoPlusForAllUsers.ps1', 'README.txt')
 Assert-ZipEntries (Join-Path $releaseRoot "BGInfoPlus-$Version-azure-vmapp.zip") `
-    @('BGInfoPlus.exe', 'Deploy-BGInfoPlusForAllUsers.ps1', 'Install-BGInfoPlus.ps1', 'Remove-BGInfoPlus.ps1')
+    @('BGInfoPlus.exe', 'DefaultConfig.json', 'Deploy-BGInfoPlusForAllUsers.ps1', 'Install-BGInfoPlus.ps1', 'Remove-BGInfoPlus.ps1')
 
 $manifest = Get-Content -LiteralPath (Join-Path $releaseRoot 'azure-vm-application.json') -Raw |
     ConvertFrom-Json -ErrorAction Stop
@@ -65,11 +65,11 @@ try {
         } finally { [Runtime.InteropServices.Marshal]::FinalReleaseComObject($view) | Out-Null }
     }
     $msiFiles = @(Read-MsiColumn 'SELECT `FileName` FROM `File`')
-    foreach ($name in @('BGInfoPlus.exe', 'Deploy-BGInfoPlusForAllUsers.ps1', 'Remove-BGInfoPlusSharedDeployment.ps1', 'BGInfoPlus-DefaultConfig.json')) {
+    foreach ($name in @('BGInfoPlus.exe', 'Deploy-BGInfoPlusForAllUsers.ps1', 'Remove-BGInfoPlusSharedDeployment.ps1', 'DefaultConfig.json')) {
         if (-not ($msiFiles | Where-Object { $_ -like "*$name*" })) { throw "MSI is missing $name" }
     }
     $customActions = @(Read-MsiColumn 'SELECT `Action` FROM `CustomAction`')
-    foreach ($name in @('InstallDefaultDeployment', 'RemoveSharedDeployment')) {
+    foreach ($name in @('RegisterLogonTask', 'RemoveSharedDeployment')) {
         if ($name -notin $customActions) { throw "MSI is missing custom action $name" }
     }
 } finally {

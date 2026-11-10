@@ -18,11 +18,11 @@ Install the machine-wide MSI or use the portable ZIP. The portable ZIP needs no 
 2. Lay out the placeholders, change colors and formatting.
 3. Choose an output resolution, then select **Preview**, **Export image**, or **Apply wallpaper**.
 
-Use **Export config…** to save a reusable JSON layout. **Set as default…** provides a fallback for users without a personal file; **Deploy for all users…** enforces the current design for every interactive user.
+Use **Import config…** and **Export config…** to exchange reusable JSON layouts. To provide a fallback, copy an exported file beside `BGInfoPlus.exe` as `DefaultConfig.json`. **Deploy for all users…** enforces the current design for every interactive user.
 
 **Always apply at login** regenerates the current user's wallpaper at sign-in.
 
-All scopes use the same validated JSON format. Personal configuration is stored under `%LOCALAPPDATA%`; protected default and all-users files are stored under `%ProgramData%`. MSI installation provisions the fallback default and logon task automatically. Azure VM Application installation provisions its supplied configuration as enforced all-users policy.
+All scopes use the same validated JSON format. Personal configuration is stored under `%LOCALAPPDATA%`, the optional fallback travels with the application, and only enforced all-users policy is stored under `%ProgramData%`. MSI installation provisions `DefaultConfig.json` and the logon task automatically. Azure VM Application installation provisions its supplied configuration as enforced all-users policy.
 
 ## Build and Test
 
@@ -33,7 +33,7 @@ dotnet build src/BGInfoPlus -c Release
 dotnet run --project tests/BGInfoPlus.Tests -c Release
 ```
 
-`tools/Test-BGInfoPlus.ps1` is the repeatable pre-release check used by the release builder. It parses maintained PowerShell scripts, validates installer XML, and runs the compiled tests. The test executable covers bounded UserData parsing, configuration precedence and validation, formatted placeholder behavior, Tab round-tripping, font-size bounds, recent colors, rendering, and atomic writes. Machine-specific Azure, networking, Task Scheduler, and desktop behavior remains integration-tested.
+`tools/Test-BGInfoPlus.ps1` is the repeatable pre-release check used by the release builder. It parses maintained PowerShell scripts, validates installer XML, and runs the compiled tests. The test executable covers bounded UserData parsing, configuration precedence and validation, formatted placeholder behavior, Tab round-tripping, font-size bounds, shared native custom colors, rendering, and atomic writes. Machine-specific Azure, networking, Task Scheduler, and desktop behavior remains integration-tested.
 
 ## More documentation
 
