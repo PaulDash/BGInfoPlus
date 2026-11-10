@@ -30,10 +30,10 @@ Use the .NET 10 SDK on Windows:
 
 ```powershell
 dotnet build src/BGInfoPlus -c Release
-dotnet run --project tests/BGInfoPlus.Tests -c Release
+dotnet test tests/BGInfoPlus.Tests -c Release
 ```
 
-`tools/Test-BGInfoPlus.ps1` is the repeatable pre-release check used by the release builder. It parses maintained PowerShell scripts, validates installer XML, and runs the compiled tests. The test executable covers bounded UserData parsing, configuration precedence and validation, formatted placeholder behavior, Tab round-tripping, font-size bounds, shared native custom colors, rendering, and atomic writes. Machine-specific Azure, networking, Task Scheduler, and desktop behavior remains integration-tested.
+The tests use xUnit and are discoverable in VS Code's Testing view with Microsoft's **C# Dev Kit** extension. `tools/Test-BGInfoPlus.ps1` is the repeatable pre-release check used by the release builder. It parses maintained PowerShell scripts, validates installer XML, and runs the xUnit suite. The suite covers bounded UserData parsing, configuration precedence and validation, formatted placeholder behavior, Tab round-tripping, font-size bounds, shared native custom colors, rendering, and atomic writes. Machine-specific Azure, networking, Task Scheduler, and desktop behavior remains integration-tested.
 
 ## More documentation
 

@@ -37,7 +37,7 @@ if ([string]::IsNullOrWhiteSpace($sampleConfiguration.Document) -or
     throw 'tools\LabDefault.json is not a valid portable BGInfoPlus configuration.'
 }
 
-& dotnet run --project (Join-Path $repositoryRoot 'tests\BGInfoPlus.Tests\BGInfoPlus.Tests.csproj') -c $Configuration
+& dotnet test (Join-Path $repositoryRoot 'tests\BGInfoPlus.Tests\BGInfoPlus.Tests.csproj') -c $Configuration
 if ($LASTEXITCODE -ne 0) { throw 'BGInfoPlus regression tests failed.' }
 
 Write-Host 'BGInfoPlus validation completed successfully.'
