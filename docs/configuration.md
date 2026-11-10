@@ -25,13 +25,15 @@ The Default scope is application behavior, not a modification of `C:\Users\Defau
 
 ### One user
 
-Open the editor and select **Apply wallpaper**. BGInfoPlus atomically saves `%LOCALAPPDATA%\BGInfoPlus\config.json` and applies it. If **Always apply at login** is selected, BGInfoPlus creates `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\BGInfoPlus.lnk`. Clearing the option and applying again removes that shortcut.
+Open the editor and select **Apply now**. BGInfoPlus atomically saves `%LOCALAPPDATA%\BGInfoPlus\config.json` and applies it. If **Always apply at login** is selected, BGInfoPlus creates `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\BGInfoPlus.lnk`. Clearing the option and applying again removes that shortcut.
+
+When the editor opens, it remembers the signed-in user's current wallpaper path and the raw Windows `WallpaperStyle` and `TileWallpaper` values in memory. Hold **Alt** while selecting **Apply now** to restore that launch-time wallpaper configuration. This is a session-only undo: the snapshot is not written to disk, and it is unavailable if Windows prevented BGInfoPlus from reading the settings at launch.
 
 The executable path is stored in the shortcut, so a portable installation must remain at a stable path.
 
 ### Users without a personal configuration
 
-Select **Export config…**, then copy the exported file beside `BGInfoPlus.exe` and name it exactly `DefaultConfig.json`. A personal file overrides this fallback. **Import config…** can load the file into the editor later without saving over the user's configuration until **Apply wallpaper** is selected.
+Select **Export config…**, then copy the exported file beside `BGInfoPlus.exe` and name it exactly `DefaultConfig.json`. A personal file overrides this fallback. **Import config…** can load the file into the editor later without saving over the user's configuration until **Apply now** is selected.
 
 The MSI already installs a release `DefaultConfig.json` and registers the interactive machine logon task. For a portable folder, place the file first and then run the deployment helper once from an elevated prompt with `-PreserveConfiguration` to register the task without creating an enforced ProgramData configuration. This is appropriate when every new lab user should start with the same design but may customize it later.
 
@@ -54,7 +56,7 @@ At runtime `--apply` resolves the effective file again. The task therefore does 
 
 ## Export and automation
 
-**Import config…** validates a selected JSON file and loads its document, placeholders, resolution, and colors into the editor and its live design surface. It does not overwrite the personal file until **Apply wallpaper** is selected.
+**Import config…** validates a selected JSON file and loads its document, placeholders, resolution, fit mode, and colors into the editor and its live design surface. It does not overwrite the personal file until **Apply now** is selected.
 
 **Export config…** writes the current design and placeholder mappings to a JSON file without per-user startup policy. The resulting file can be copied as application-local `DefaultConfig.json`, archived with a lab definition, used as an Azure VM Application `configurationReference`, or installed as enforced policy with the deployment helper.
 
@@ -89,8 +91,11 @@ The JSON object contains:
 - `Document`: the serialized rich-text layout;
 - `Placeholders`: named data-source mappings;
 - `RunAtSignIn`: a personal-scope preference, normalized to `false` when exported or installed as a machine template;
-- `ImageWidth` and `ImageHeight`; and
-- `BackgroundColor`.
+- `ImageWidth` and `ImageHeight`;
+- `BackgroundColor`; and
+- `WallpaperFit`: `Fill`, `Fit`, or `Stretch`.
+
+The editor initially selects **Current** output resolution even when a saved configuration used another size. The adjacent label shows the familiar image proportion, such as `16:9`. Importing a configuration explicitly selects its saved resolution. New and exported configurations store the selected wallpaper fit mode; older files without `WallpaperFit` remain compatible and use `Fill`.
 
 Configuration files are limited to 4 MiB, documents to 1,048,576 characters, placeholders to 128, and rendered images to 3840 × 2160. See `AppLimits.cs` for the authoritative bounds.
 

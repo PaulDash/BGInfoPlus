@@ -47,6 +47,8 @@ internal static class AppLimits
             throw new InvalidDataException($"No more than {MaxPlaceholders} placeholders are allowed.");
         if (configuration.BackgroundColor is null || configuration.BackgroundColor.Length > 32)
             throw new InvalidDataException("The wallpaper color is invalid.");
+        if (!Enum.IsDefined(configuration.WallpaperFit))
+            throw new InvalidDataException("The wallpaper fit mode is invalid.");
         foreach (var placeholder in configuration.Placeholders)
         {
             if (placeholder is null) throw new InvalidDataException("A placeholder definition is missing.");

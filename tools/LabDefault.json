@@ -59,5 +59,6 @@
   "RunAtSignIn": false,
   "ImageWidth": 1440,
   "ImageHeight": 900,
-  "BackgroundColor": "#004080"
+  "BackgroundColor": "#004080",
+  "WallpaperFit": "Fill"
 }

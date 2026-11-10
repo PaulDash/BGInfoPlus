@@ -22,6 +22,8 @@ internal sealed class Editor : Window
     private readonly TextBlock status = new() { Foreground = UITheme.SecondaryTextBrush, TextWrapping = TextWrapping.Wrap };
     private readonly CheckBox runAtSignIn = new() { Content = "Apply at login", Foreground = UITheme.TextBrush, IsChecked = false, Margin = new Thickness(8, 8, 0, 0) };
     private readonly ComboBox resolutions = new() { Width = 170, Height = 34, HorizontalAlignment = HorizontalAlignment.Left, VerticalContentAlignment = VerticalAlignment.Center, Padding = new Thickness(8, 0, 4, 0) };
+    private readonly TextBlock aspectRatio = new() { Foreground = UITheme.SecondaryTextBrush, HorizontalAlignment = HorizontalAlignment.Right, TextAlignment = TextAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
+    private readonly ComboBox wallpaperFits = new() { Width = 170, Height = 34, HorizontalAlignment = HorizontalAlignment.Left, VerticalContentAlignment = VerticalAlignment.Center, Padding = new Thickness(8, 0, 4, 0), ItemsSource = Enum.GetValues<WallpaperFit>(), SelectedItem = WallpaperFit.Fill };
     private readonly List<DisplayResolution> availableResolutions = [];
     private readonly List<PlaceholderDefinition> definitions = [];
     private ConfigurationScope loadedScope = ConfigurationScope.BuiltIn;
@@ -29,9 +31,11 @@ internal sealed class Editor : Window
     private ComboBox? fontSizeControl;
     private double currentFontSize = 24;
     private Color wallpaperColor = Color.FromRgb(15, 23, 42);
+    private readonly WindowsWallpaperConfiguration? launchWallpaperConfiguration;
 
     public Editor()
     {
+        launchWallpaperConfiguration = WallpaperService.CaptureCurrentConfiguration();
         var availableHeight = Math.Max(620, SystemParameters.WorkArea.Height - 48);
         Title = "BGInfoPlus"; Width = 1180; Height = Math.Min(900, availableHeight); MinWidth = 1080; MinHeight = 620;
         Icon = ApplicationIcon.Create();
@@ -66,8 +70,18 @@ internal sealed class Editor : Window
         panel.Children.Add(new TextBlock { Text = "Image setup", FontSize = 18, FontWeight = FontWeights.SemiBold, Foreground = UITheme.TextBrush });
         panel.Children.Add(new TextBlock { Text = "Output resolution", Foreground = UITheme.SecondaryTextBrush, Margin = new Thickness(0, 8, 0, 6) });
         resolutions.ToolTip = "Wallpaper output resolution";
-        resolutions.Margin = new Thickness(0, 0, 0, 18);
-        panel.Children.Add(resolutions);
+        resolutions.SelectionChanged += (_, _) => UpdateAspectRatio();
+        var resolutionRow = new Grid { Margin = new Thickness(0, 0, 0, 10) };
+        resolutionRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        resolutionRow.ColumnDefinitions.Add(new ColumnDefinition());
+        resolutionRow.Children.Add(resolutions);
+        Grid.SetColumn(aspectRatio, 1); resolutionRow.Children.Add(aspectRatio);
+        panel.Children.Add(resolutionRow);
+        panel.Children.Add(new TextBlock { Text = "Wallpaper fit", Foreground = UITheme.SecondaryTextBrush, Margin = new Thickness(0, 0, 0, 6) });
+        wallpaperFits.ToolTip = "How Windows fits the generated image to the desktop";
+        wallpaperFits.Margin = new Thickness(0, 0, 0, 18);
+        panel.Children.Add(wallpaperFits);
+        UpdateAspectRatio();
         panel.Children.Add(new TextBlock { Text = "Insert data", FontSize = 18, FontWeight = FontWeights.SemiBold, Foreground = UITheme.TextBrush });
         panel.Children.Add(new TextBlock { Text = "Choose a helper, then insert one or more named placeholders at the caret.", TextWrapping = TextWrapping.Wrap, Foreground = UITheme.SecondaryTextBrush, Margin = new Thickness(0, 4, 0, 16) });
         foreach (var (title, action) in new (string, Action)[]
@@ -220,7 +234,7 @@ internal sealed class Editor : Window
         var secondaryActionMargin = new Thickness(4, 6, 4, 0);
         var preview = new Button { Content = "Preview", Width = actionButtonWidth, Height = 34, Margin = actionMargin }; preview.Click += async (_, _) => await PreviewAsync();
         Grid.SetColumn(preview, 0); bar.Children.Add(preview);
-        var apply = new Button { Content = "Apply now", Width = actionButtonWidth, Height = 34, Margin = actionMargin, Style = UITheme.AccentButtonStyle() }; apply.Click += async (_, _) => await ApplyAsync();
+        var apply = new Button { Content = "Apply now", Width = actionButtonWidth, Height = 34, Margin = actionMargin, Style = UITheme.AccentButtonStyle(), ToolTip = "Apply BGInfoPlus, or hold Alt while clicking to restore the wallpaper from before this window opened" }; apply.Click += async (_, _) => await ApplyAsync((Keyboard.Modifiers & ModifierKeys.Alt) != 0);
         Grid.SetColumn(apply, 1); bar.Children.Add(apply);
         var deploy = new Button { Content = "Apply to all users", Width = actionButtonWidth, Height = 34, Margin = actionMargin, ToolTip = "Save this design as the machine-wide template and apply it whenever any user signs in" };
         deploy.Click += async (_, _) => await DeployForAllUsersAsync(); Grid.SetColumn(deploy, 2); bar.Children.Add(deploy);
@@ -237,7 +251,8 @@ internal sealed class Editor : Window
     private AppConfiguration CurrentConfiguration()
     {
         var selected = resolutions.SelectedItem as DisplayResolution ?? ScreenResolution.Current;
-        var configuration = new AppConfiguration(DocumentTools.Save(editor.Document), definitions.ToArray(), runAtSignIn.IsEnabled && runAtSignIn.IsChecked == true, selected.Width, selected.Height, ColorText(wallpaperColor));
+        var fit = wallpaperFits.SelectedItem is WallpaperFit selectedFit ? selectedFit : WallpaperFit.Fill;
+        var configuration = new AppConfiguration(DocumentTools.Save(editor.Document), definitions.ToArray(), runAtSignIn.IsEnabled && runAtSignIn.IsChecked == true, selected.Width, selected.Height, ColorText(wallpaperColor), fit);
         AppLimits.Validate(configuration);
         return configuration;
     }
@@ -255,6 +270,34 @@ internal sealed class Editor : Window
             if (width != current.Width || height != current.Height) availableResolutions.Add(new DisplayResolution(width, height));
         resolutions.ItemsSource = availableResolutions;
         resolutions.SelectedIndex = 0;
+    }
+
+    internal static string AspectRatioText(int width, int height)
+    {
+        if (width <= 0 || height <= 0) return string.Empty;
+        // Some established display sizes are only approximately their marketed ratio
+        // (1366 x 768, for example). Prefer the familiar label within 0.5 percent.
+        foreach (var ratio in new (int Width, int Height)[] { (16, 9), (16, 10), (4, 3), (5, 4), (3, 2), (5, 3) })
+        {
+            var relativeDifference = Math.Abs((double)width / height - (double)ratio.Width / ratio.Height) /
+                                     ((double)ratio.Width / ratio.Height);
+            if (relativeDifference <= 0.005) return $"{ratio.Width}:{ratio.Height}";
+        }
+        var divisor = GreatestCommonDivisor(Math.Abs(width), Math.Abs(height));
+        return $"{width / divisor}:{height / divisor}";
+    }
+
+    private static int GreatestCommonDivisor(int left, int right)
+    {
+        while (right != 0) (left, right) = (right, left % right);
+        return left;
+    }
+
+    private void UpdateAspectRatio()
+    {
+        aspectRatio.Text = resolutions.SelectedItem is DisplayResolution resolution
+            ? AspectRatioText(resolution.Width, resolution.Height)
+            : string.Empty;
     }
 
     private void ChooseFontColor()
@@ -311,10 +354,18 @@ internal sealed class Editor : Window
         catch (Exception e) { status.Text = "Preview could not be generated: " + e.Message; }
     }
 
-    private async Task ApplyAsync()
+    private async Task ApplyAsync(bool restoreLaunchWallpaper)
     {
         try
         {
+            if (restoreLaunchWallpaper)
+            {
+                if (launchWallpaperConfiguration is null)
+                    throw new InvalidOperationException("The wallpaper configuration from before launch could not be read.");
+                WallpaperService.RestoreConfiguration(launchWallpaperConfiguration);
+                status.Text = "Restored the wallpaper configuration from before BGInfoPlus was opened.";
+                return;
+            }
             var configuration = CurrentConfiguration(); ConfigurationStore.SaveUser(configuration);
             status.Text = "Applying wallpaper…"; await WallpaperService.ApplyAsync(configuration);
             status.Text = loadedScope == ConfigurationScope.AllUsers
@@ -354,7 +405,7 @@ internal sealed class Editor : Window
             if (dialog.ShowDialog(this) != true) return;
             var configuration = ConfigurationFileStore.Load(dialog.FileName);
             var scope = File.Exists(ConfigurationStore.AllUsersPath) ? ConfigurationScope.AllUsers : ConfigurationScope.Explicit;
-            ApplyConfigurationToEditor(configuration, scope);
+            ApplyConfigurationToEditor(configuration, scope, selectCurrentResolution: false);
             if (scope == ConfigurationScope.AllUsers)
             {
                 runAtSignIn.IsChecked = true;
@@ -443,7 +494,7 @@ internal sealed class Editor : Window
         try
         {
             var resolved = ConfigurationStore.LoadForEditor();
-            ApplyConfigurationToEditor(resolved.Configuration, resolved.Scope);
+            ApplyConfigurationToEditor(resolved.Configuration, resolved.Scope, selectCurrentResolution: true);
             var machineLogon = resolved.Scope == ConfigurationScope.AllUsers;
             var configuration = resolved.Configuration;
             runAtSignIn.IsChecked = machineLogon || configuration.RunAtSignIn;
@@ -461,7 +512,7 @@ internal sealed class Editor : Window
         catch (Exception e) { editor.Document = DocumentTools.NewDocument(); status.Text = "Configuration could not be loaded: " + e.Message; }
     }
 
-    private void ApplyConfigurationToEditor(AppConfiguration configuration, ConfigurationScope scope)
+    private void ApplyConfigurationToEditor(AppConfiguration configuration, ConfigurationScope scope, bool selectCurrentResolution)
     {
         AppLimits.Validate(configuration);
         loadedScope = scope;
@@ -476,14 +527,19 @@ internal sealed class Editor : Window
             runAtSignIn.ToolTip = null;
         }
         wallpaperColor = ParseColor(configuration.BackgroundColor, wallpaperColor);
-        var saved = availableResolutions.FirstOrDefault(r => r.Width == configuration.ImageWidth && r.Height == configuration.ImageHeight);
-        if (saved is null)
+        var selectedResolution = availableResolutions[0];
+        if (!selectCurrentResolution)
         {
-            saved = new DisplayResolution(configuration.ImageWidth, configuration.ImageHeight, "Imported");
-            availableResolutions.Add(saved);
-            resolutions.Items.Refresh();
+            selectedResolution = availableResolutions.FirstOrDefault(r => r.Width == configuration.ImageWidth && r.Height == configuration.ImageHeight)!;
+            if (selectedResolution is null)
+            {
+                selectedResolution = new DisplayResolution(configuration.ImageWidth, configuration.ImageHeight, "Imported");
+                availableResolutions.Add(selectedResolution);
+                resolutions.Items.Refresh();
+            }
         }
-        resolutions.SelectedItem = saved;
+        resolutions.SelectedItem = selectedResolution;
+        wallpaperFits.SelectedItem = configuration.WallpaperFit;
         editor.Background = new SolidColorBrush(wallpaperColor);
         UpdateEditorContrast();
         RefreshPlaceholderList();

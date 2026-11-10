@@ -16,7 +16,7 @@ Install the machine-wide MSI or use the portable ZIP. The portable ZIP needs no 
 
 1. Start by inserting data from the available data helpers. A helper inserts a named placeholder such as `{Hostname}` at the cursor.
 2. Lay out the placeholders, change colors and formatting.
-3. Choose an output resolution, then select **Preview**, **Export image**, or **Apply wallpaper**.
+3. Choose an output resolution and wallpaper fit mode, then select **Preview**, **Export image**, or **Apply now**. Hold **Alt** while selecting **Apply now** to restore the wallpaper configuration captured when the editor opened.
 
 Use **Import config…** and **Export config…** to exchange reusable JSON layouts. To provide a fallback, copy an exported file beside `BGInfoPlus.exe` as `DefaultConfig.json`. **Deploy for all users…** enforces the current design for every interactive user.
 
@@ -45,7 +45,7 @@ dotnet run --project tests/BGInfoPlus.Tests -c Release
 
 Rendering is limited to 3840 × 2160. Azure UserData accepts UTF-8 JSON or Base64-encoded UTF-8 JSON, is read but never executed, and is limited to 256 KiB, 256 scalar values, and 4,096 characters per value.
 
-Windows wallpaper-fit settings and administrator policy still control how the generated image is displayed or whether it can be applied.
+Administrator policy can prevent the generated image from being applied. BGInfoPlus supports the Windows Fill, Fit, and Stretch modes; span, tile, slideshow, and per-monitor wallpaper layouts are not editor options.
 
 ## Copyright
 

@@ -58,7 +58,7 @@ RunSta(() =>
     static string Text(FlowDocument document) => new TextRange(document.ContentStart, document.ContentEnd).Text.Trim();
 
     var defaultConfiguration = ConfigurationFileStore.CreateDefault();
-    Check(defaultConfiguration.ImageWidth == 1920 && defaultConfiguration.ImageHeight == 1080 && !defaultConfiguration.RunAtSignIn,
+    Check(defaultConfiguration.ImageWidth == 1920 && defaultConfiguration.ImageHeight == 1080 && !defaultConfiguration.RunAtSignIn && defaultConfiguration.WallpaperFit == WallpaperFit.Fill,
         "Default shared configuration uses a standard resolution and does not enable per-user auto-apply");
     Check(defaultConfiguration.Placeholders.Select(p => p.Name).SequenceEqual(new[] { "Hostname", "IPv4" }),
         "Default shared configuration includes its system placeholders");
@@ -112,6 +112,14 @@ var decimalFontSizeText = 24.5.ToString(CultureInfo.CurrentCulture);
 Check(Editor.TryParseFontSize(decimalFontSizeText, out var decimalFontSize) && decimalFontSize == 24.5, "Decimal font size accepted");
 foreach (var invalidSize in new[] { "", "7.99", "96.01", "NaN", "Infinity", "invalid" })
     Check(!Editor.TryParseFontSize(invalidSize, out _), "Invalid font size rejected: " + invalidSize);
+Check(Editor.AspectRatioText(1920, 1080) == "16:9", "Common aspect ratio is reduced");
+Check(Editor.AspectRatioText(1366, 768) == "16:9", "Near-standard display resolution uses its familiar aspect ratio");
+Check(Editor.AspectRatioText(1680, 1050) == "16:10", "Display aspect ratio uses conventional notation");
+Check(Editor.AspectRatioText(1280, 1024) == "5:4", "Non-widescreen aspect ratio is reduced");
+Check(Editor.AspectRatioText(0, 1080) == string.Empty, "Invalid aspect ratio dimensions are not displayed");
+Check(WallpaperService.FitRegistryValues(WallpaperFit.Fill) == ("10", "0"), "Fill maps to Windows wallpaper settings");
+Check(WallpaperService.FitRegistryValues(WallpaperFit.Fit) == ("6", "0"), "Fit maps to Windows wallpaper settings");
+Check(WallpaperService.FitRegistryValues(WallpaperFit.Stretch) == ("2", "0"), "Stretch maps to Windows wallpaper settings");
 var customPalette = new NativeColorPalette();
 var customColorBuffer = System.Runtime.InteropServices.Marshal.AllocHGlobal(NativeColorPalette.ColorCount * sizeof(int));
 try
@@ -144,15 +152,28 @@ try
 }
 catch (InvalidDataException) { invalidConfigurationRejected = true; }
 Check(invalidConfigurationRejected, "Invalid placeholder names rejected");
+var invalidFitRejected = false;
+try { AppLimits.Validate(ConfigurationFileStore.CreateDefault() with { WallpaperFit = (WallpaperFit)999 }); }
+catch (InvalidDataException) { invalidFitRejected = true; }
+Check(invalidFitRejected, "Invalid wallpaper fit mode rejected");
 
 var configurationDirectory = Path.Combine(Path.GetTempPath(), "BGInfoPlus.ConfigTests", Guid.NewGuid().ToString("N"));
 var configurationPath = Path.Combine(configurationDirectory, "config.json");
-var sharedConfiguration = new AppConfiguration("<FlowDocument />", [new PlaceholderDefinition("Hostname", "Hostname", "Networking", "Hostname")], true, 1920, 1080, "#102030");
+var sharedConfiguration = new AppConfiguration("<FlowDocument />", [new PlaceholderDefinition("Hostname", "Hostname", "Networking", "Hostname")], true, 1920, 1080, "#102030", WallpaperFit.Stretch);
 ConfigurationFileStore.Save(configurationPath, sharedConfiguration);
 var loadedSharedConfiguration = ConfigurationFileStore.Load(configurationPath);
 Check(loadedSharedConfiguration.Document == sharedConfiguration.Document, "Shared configuration document round-trips");
 Check(loadedSharedConfiguration.Placeholders.SequenceEqual(sharedConfiguration.Placeholders), "Shared configuration placeholders round-trip");
 Check(loadedSharedConfiguration.RunAtSignIn, "A personal configuration preserves its login preference");
+Check(loadedSharedConfiguration.WallpaperFit == WallpaperFit.Stretch, "Wallpaper fit mode round-trips as configuration data");
+var legacyConfigurationJson = JsonSerializer.Serialize(new
+{
+    sharedConfiguration.Document, sharedConfiguration.Placeholders, sharedConfiguration.RunAtSignIn,
+    sharedConfiguration.ImageWidth, sharedConfiguration.ImageHeight, sharedConfiguration.BackgroundColor
+});
+File.WriteAllText(configurationPath, legacyConfigurationJson);
+Check(ConfigurationFileStore.Load(configurationPath).WallpaperFit == WallpaperFit.Fill,
+    "Configuration files from before wallpaper fit support default to Fill");
 ConfigurationFileStore.SaveShared(configurationPath, sharedConfiguration);
 Check(!ConfigurationFileStore.Load(configurationPath).RunAtSignIn, "A portable or machine configuration excludes per-user startup policy");
 

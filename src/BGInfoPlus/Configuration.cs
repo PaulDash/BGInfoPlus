@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Runtime.InteropServices;
 using Microsoft.Win32;
 using System.IO;
@@ -10,7 +11,8 @@ internal sealed record DisplayResolution(int Width, int Height, string? Descript
 {
     public override string ToString() => $"{Width} × {Height}" + (Description is null ? "" : $"  {Description}");
 }
-internal sealed record AppConfiguration(string Document, PlaceholderDefinition[] Placeholders, bool RunAtSignIn, int ImageWidth, int ImageHeight, string BackgroundColor);
+internal enum WallpaperFit { Fill, Fit, Stretch }
+internal sealed record AppConfiguration(string Document, PlaceholderDefinition[] Placeholders, bool RunAtSignIn, int ImageWidth, int ImageHeight, string BackgroundColor, WallpaperFit WallpaperFit = WallpaperFit.Fill);
 internal enum ConfigurationScope { BuiltIn, Default, User, AllUsers, Explicit }
 internal sealed record ResolvedConfiguration(AppConfiguration Configuration, ConfigurationScope Scope, string? Path);
 
@@ -71,7 +73,11 @@ internal static class ConfigurationStore
 
 internal static class ConfigurationFileStore
 {
-    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        WriteIndented = true,
+        Converters = { new JsonStringEnumConverter() }
+    };
 
     public static AppConfiguration CreateDefault() => new(
         DocumentTools.Save(DocumentTools.NewDocument()),

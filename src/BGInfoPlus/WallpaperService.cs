@@ -5,8 +5,11 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Threading;
+using Microsoft.Win32;
 
 namespace BGInfoPlus;
+
+internal sealed record WindowsWallpaperConfiguration(string Path, string? WallpaperStyle, string? TileWallpaper);
 
 internal static class WallpaperService
 {
@@ -51,7 +54,44 @@ internal static class WallpaperService
             var encoder = new BmpBitmapEncoder();
             encoder.Frames.Add(BitmapFrame.Create(bitmap));
             AtomicFile.Write(path, encoder.Save);
+            SetWallpaperFit(configuration.WallpaperFit);
             if (!SystemParametersInfo(0x0014, 0, path, 0x0001 | 0x0002))
+                throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+        }
+        finally { if (acquired) mutex.ReleaseMutex(); }
+    }
+
+    public static WindowsWallpaperConfiguration? CaptureCurrentConfiguration()
+    {
+        try
+        {
+            using var desktop = Registry.CurrentUser.OpenSubKey(@"Control Panel\Desktop");
+            return new WindowsWallpaperConfiguration(
+                desktop?.GetValue("WallPaper")?.ToString() ?? string.Empty,
+                desktop?.GetValue("WallpaperStyle")?.ToString(),
+                desktop?.GetValue("TileWallpaper")?.ToString());
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            return null;
+        }
+    }
+
+    public static void RestoreConfiguration(WindowsWallpaperConfiguration configuration)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+        using var mutex = new Mutex(false, @"Local\BGInfoPlus.WallpaperApply");
+        var acquired = false;
+        try
+        {
+            try { acquired = mutex.WaitOne(TimeSpan.FromSeconds(15)); }
+            catch (AbandonedMutexException) { acquired = true; }
+            if (!acquired) throw new IOException("Another BGInfoPlus wallpaper operation is still running.");
+            using var desktop = Registry.CurrentUser.CreateSubKey(@"Control Panel\Desktop", writable: true)
+                ?? throw new InvalidOperationException("The Windows wallpaper settings could not be opened.");
+            RestoreRegistryValue(desktop, "WallpaperStyle", configuration.WallpaperStyle);
+            RestoreRegistryValue(desktop, "TileWallpaper", configuration.TileWallpaper);
+            if (!SystemParametersInfo(0x0014, 0, configuration.Path, 0x0001 | 0x0002))
                 throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
         }
         finally { if (acquired) mutex.ReleaseMutex(); }
@@ -96,6 +136,29 @@ internal static class WallpaperService
     {
         try { return (Color)ColorConverter.ConvertFromString(value); }
         catch { return Color.FromRgb(15, 23, 42); }
+    }
+
+    internal static (string WallpaperStyle, string TileWallpaper) FitRegistryValues(WallpaperFit fit) => fit switch
+    {
+        WallpaperFit.Fill => ("10", "0"),
+        WallpaperFit.Fit => ("6", "0"),
+        WallpaperFit.Stretch => ("2", "0"),
+        _ => throw new InvalidDataException("The wallpaper fit mode is invalid.")
+    };
+
+    private static void SetWallpaperFit(WallpaperFit fit)
+    {
+        var values = FitRegistryValues(fit);
+        using var desktop = Registry.CurrentUser.CreateSubKey(@"Control Panel\Desktop", writable: true)
+            ?? throw new InvalidOperationException("The Windows wallpaper settings could not be opened.");
+        desktop.SetValue("WallpaperStyle", values.WallpaperStyle, RegistryValueKind.String);
+        desktop.SetValue("TileWallpaper", values.TileWallpaper, RegistryValueKind.String);
+    }
+
+    private static void RestoreRegistryValue(RegistryKey key, string name, string? value)
+    {
+        if (value is null) key.DeleteValue(name, throwOnMissingValue: false);
+        else key.SetValue(name, value, RegistryValueKind.String);
     }
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
