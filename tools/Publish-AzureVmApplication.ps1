@@ -33,12 +33,11 @@ function Invoke-AzQuiet {
     if (-not [string]::IsNullOrWhiteSpace($script:SelectedSubscriptionId) -and '--subscription' -notin $Arguments) {
         $effectiveArguments += @('--subscription', $script:SelectedSubscriptionId)
     }
-<#if ($ContainsSecret) {
-        & az @effectiveArguments --only-show-errors --output none 2>$null
+    if ($ContainsSecret) {
+        Invoke-AzCli ($effectiveArguments + @('--only-show-errors', '--output', 'none')) 2>$null
         if ($LASTEXITCODE -ne 0) { throw "Azure CLI operation failed with exit code $LASTEXITCODE. Secret-bearing arguments were not included in this error." }
         return
     }
-#>
     $output = Invoke-AzCli ($effectiveArguments + @('--only-show-errors', '--output', 'none')) 2>&1
     if ($LASTEXITCODE -ne 0) { throw ($output -join [Environment]::NewLine) }
 }
@@ -296,4 +295,76 @@ Invoke-AzQuiet -ContainsSecret @('sig', 'gallery-application', 'version', 'creat
 $versionId = "/subscriptions/$($subscription.id)/resourceGroups/$resourceGroupName/providers/Microsoft.Compute/galleries/$galleryName/applications/$applicationName/versions/$version"
 Write-Host "`nPublished successfully." -ForegroundColor Green
 Write-Host "VM Application version ID:`n$versionId"
-Write-Host "`nDeploy it with 'Treat deployment as failure' enabled. This wizard did not save the selected resource information."
+Write-Host "`nThis wizard did not save the selected resource information."
+
+if (-not (Read-YesNo 'Assign this version to a VM now?' $false)) {
+    Write-Host "Deploy it later with 'Treat deployment as failure' enabled."
+    return
+}
+
+$virtualMachines = @(Invoke-AzJson @('vm', 'list', '--query', '[].{name:name,resourceGroup:resourceGroup,location:location}'))
+if ($virtualMachines.Count -eq 0) {
+    Write-Warning 'No virtual machines are available in the selected subscription. Publication is complete.'
+    return
+}
+$virtualMachine = Select-FromList 'Choose a VM to receive this application version:' $virtualMachines {
+    param($item) "$($item.name) — $($item.resourceGroup) ($($item.location))"
+}
+$configurationOverride = (Read-Host 'Configuration JSON blob HTTPS URL (leave blank to use packaged DefaultConfig.json)').Trim()
+if (-not [string]::IsNullOrWhiteSpace($configurationOverride) -and
+    (-not [Uri]::IsWellFormedUriString($configurationOverride, [UriKind]::Absolute) -or
+     -not $configurationOverride.StartsWith('https://', [StringComparison]::OrdinalIgnoreCase))) {
+    throw 'The configuration override must be an absolute HTTPS blob URL.'
+}
+
+# `az vm application set` replaces the complete assignment list. Preserve other
+# applications and their per-VM configuration, failure, and auto-upgrade flags;
+# replace only another version of this same gallery application.
+$existingApplications = @(Invoke-AzJson @('vm', 'show',
+    '--resource-group', $virtualMachine.resourceGroup,
+    '--name', $virtualMachine.name,
+    '--query', 'applicationProfile.galleryApplications'))
+$applicationPath = "/applications/$applicationName/versions/"
+$retainedApplications = @($existingApplications | Where-Object {
+    $null -ne $_ -and -not ([string]$_.packageReferenceId).Contains($applicationPath, [StringComparison]::OrdinalIgnoreCase)
+})
+$applicationIds = [Collections.Generic.List[string]]::new()
+$configurationOverrides = [Collections.Generic.List[string]]::new()
+$failureSettings = [Collections.Generic.List[string]]::new()
+$automaticUpgradeSettings = [Collections.Generic.List[string]]::new()
+foreach ($existingApplication in $retainedApplications) {
+    $applicationIds.Add([string]$existingApplication.packageReferenceId)
+    $configurationOverrides.Add($(if ([string]::IsNullOrWhiteSpace($existingApplication.configurationReference)) { 'null' } else { [string]$existingApplication.configurationReference }))
+    $failureSettings.Add(([bool]$existingApplication.treatFailureAsDeploymentFailure).ToString().ToLowerInvariant())
+    $automaticUpgradeSettings.Add(([bool]$existingApplication.enableAutomaticUpgrade).ToString().ToLowerInvariant())
+}
+$applicationIds.Add($versionId)
+$configurationOverrides.Add($(if ([string]::IsNullOrWhiteSpace($configurationOverride)) { 'null' } else { $configurationOverride }))
+$failureSettings.Add('true')
+$automaticUpgradeSettings.Add('false')
+
+Write-Host "`nVM assignment plan" -ForegroundColor Cyan
+Write-Host "  VM:                    $($virtualMachine.name) — $($virtualMachine.resourceGroup)"
+Write-Host "  BGInfoPlus version:    $version"
+Write-Host "  Configuration override: $(if ([string]::IsNullOrWhiteSpace($configurationOverride)) { 'none (packaged fallback)' } else { 'provided HTTPS blob URL' })"
+Write-Host "  Other VM applications preserved: $($retainedApplications.Count)"
+if (-not (Read-YesNo 'Apply this VM assignment?' $false)) {
+    Write-Host 'VM assignment cancelled. The gallery version remains published.'
+    return
+}
+
+$assignmentArguments = [Collections.Generic.List[string]]::new()
+$assignmentArguments.AddRange([string[]]@('vm', 'application', 'set',
+    '--resource-group', [string]$virtualMachine.resourceGroup,
+    '--name', [string]$virtualMachine.name,
+    '--app-version-ids'))
+$assignmentArguments.AddRange($applicationIds)
+$assignmentArguments.Add('--app-config-overrides')
+$assignmentArguments.AddRange($configurationOverrides)
+$assignmentArguments.Add('--treat-deployment-as-failure')
+$assignmentArguments.AddRange($failureSettings)
+$assignmentArguments.Add('--enable-automatic-upgrade')
+$assignmentArguments.AddRange($automaticUpgradeSettings)
+Invoke-AzQuiet -ContainsSecret $assignmentArguments.ToArray()
+
+Write-Host "BGInfoPlus $version was assigned to $($virtualMachine.name)." -ForegroundColor Green

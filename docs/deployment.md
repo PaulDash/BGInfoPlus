@@ -57,6 +57,8 @@ Publish a release package with the interactive wizard:
 
 The storage-upload path uploads only the VM Application ZIP and creates a seven-day, read-only user-delegation SAS URL. The signed-in identity needs `Storage Blob Data Contributor` and `Storage Blob Delegator` on the storage account, plus access to the selected resource group. The managed-identity path asks only for the package's plain HTTPS blob URL; the gallery's user-assigned identity must be able to read it. The wizard reviews the plan before making Azure changes and does not save resource details or SAS values to the repository.
 
+After publication, the wizard can optionally assign the new version to a VM. It preserves the VM's other application assignments and lets you provide an HTTPS JSON blob URL as `--app-config-overrides`, or leave it blank to use the packaged fallback. SAS-bearing URLs are not repeated in the confirmation plan or included in Azure CLI error output.
+
 Deploy the replicated version to a VM with failure propagation enabled:
 
 ```powershell

@@ -43,6 +43,11 @@ if ($optionalInstallCommand -notlike "*if (Test-Path '.\BGInfoPlus-config.json' 
     $optionalInstallCommand -notlike '*else {*Install-BGInfoPlus.ps1*}*') {
     throw 'The publisher did not make an existing release manifest configuration optional.'
 }
+foreach ($requiredPublisherToken in @('--app-config-overrides', 'Configuration JSON blob HTTPS URL', 'Other VM applications preserved')) {
+    if (-not $publisherSource.Contains($requiredPublisherToken, [StringComparison]::Ordinal)) {
+        throw "The Azure VM Application publisher is missing VM configuration override support: $requiredPublisherToken"
+    }
+}
 
 & (Join-Path $repositoryRoot 'packaging\azure-vm-application\Deploy-BGInfoPlusForAllUsers.ps1') -ValidateOnly
 if (-not $?) { throw 'The interactive logon task definition is invalid.' }
