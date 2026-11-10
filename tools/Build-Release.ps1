@@ -3,8 +3,23 @@
 param(
     [Parameter(Mandatory)]
     [ValidatePattern('^\d+\.\d+\.\d+$')]
-    [string]$Version
+    [string]$Version,
+    [switch]$SkipGitHubRelease
 )
+
+function Read-YesNo([string]$Prompt) {
+    while ($true) {
+        $answer = (Read-Host "$Prompt [y/N]").Trim()
+        if ([string]::IsNullOrWhiteSpace($answer) -or $answer -match '^(?i:n|no)$') { return $false }
+        if ($answer -match '^(?i:y|yes)$') { return $true }
+        Write-Warning 'Enter Y or N.'
+    }
+}
+
+function Invoke-Checked([string]$FilePath, [string[]]$Arguments, [string]$FailureMessage) {
+    & $FilePath @Arguments
+    if ($LASTEXITCODE -ne 0) { throw $FailureMessage }
+}
 
 $ErrorActionPreference = 'Stop'
 $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
@@ -121,3 +136,77 @@ if ($LASTEXITCODE -ne 0) { throw 'Release artifact validation failed.' }
 
 Remove-Item -LiteralPath $publishRoot, $portableStage, $vmStage -Recurse -Force
 Write-Host "Release artifacts created in $releaseRoot"
+
+if ($SkipGitHubRelease) {
+    Write-Host 'Skipped the interactive GitHub release prompt.'
+    return
+}
+
+$tagName = "v$Version"
+if (-not (Read-YesNo "Create GitHub release $tagName from these validated artifacts now?")) {
+    Write-Host 'GitHub release creation skipped.'
+    return
+}
+
+$gh = Get-Command gh -CommandType Application -ErrorAction SilentlyContinue
+if ($null -eq $gh) {
+    throw 'GitHub CLI (gh) is required to create the release. Install it, run gh auth login, and rerun the build.'
+}
+Invoke-Checked $gh.Source @('auth', 'status', '--hostname', 'github.com') `
+    'GitHub CLI is not authenticated. Run gh auth login and rerun the build.'
+
+$worktreeChanges = @(& git -C $repositoryRoot status --porcelain)
+if ($LASTEXITCODE -ne 0) { throw 'Could not inspect the Git worktree.' }
+if ($worktreeChanges.Count -ne 0) {
+    throw 'The Git worktree must be clean before publishing a release. Commit or stash the listed changes and rerun the build.'
+}
+
+$branch = [string](& git -C $repositoryRoot branch --show-current)
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($branch)) {
+    throw 'GitHub release creation requires a checked-out branch, not a detached HEAD.'
+}
+$branch = $branch.Trim()
+$headCommit = ([string](& git -C $repositoryRoot rev-parse HEAD)).Trim()
+if ($LASTEXITCODE -ne 0 -or $headCommit -notmatch '^[a-f0-9]{40}$') { throw 'Could not resolve the release commit.' }
+$originUrl = ([string](& git -C $repositoryRoot remote get-url origin)).Trim()
+if ($LASTEXITCODE -ne 0 -or $originUrl -notmatch 'github\.com[/:](?<repository>[^/:\s]+/[^/\s]+?)(?:\.git)?$') {
+    throw 'The origin remote must identify a GitHub repository.'
+}
+$repository = $Matches.repository
+
+$localTagCommit = [string](& git -C $repositoryRoot rev-list -n 1 $tagName 2>$null)
+if ($LASTEXITCODE -eq 0 -and $localTagCommit.Trim() -ne $headCommit) {
+    throw "Local tag $tagName points to a different commit. Refusing to move a release tag."
+}
+
+& $gh.Source release view $tagName --repo $repository *> $null
+if ($LASTEXITCODE -eq 0) { throw "GitHub release $tagName already exists." }
+
+$remoteTag = @(& git -C $repositoryRoot ls-remote --tags origin "refs/tags/$tagName" "refs/tags/$tagName^{}")
+if ($LASTEXITCODE -ne 0) { throw "Could not inspect remote tag $tagName." }
+if ($remoteTag.Count -gt 0) {
+    $peeledTag = @($remoteTag | Where-Object { $_ -like "*refs/tags/$tagName^{}" })
+    $remoteTagLine = if ($peeledTag.Count) { $peeledTag[0] } else { $remoteTag[0] }
+    $remoteTagCommit = ($remoteTagLine -split '\s+')[0]
+    if ($remoteTagCommit -ne $headCommit) {
+        throw "Remote tag $tagName does not point to the current commit. Refusing to publish the release."
+    }
+}
+
+Invoke-Checked 'git' @('-C', $repositoryRoot, 'push', 'origin', "HEAD:refs/heads/$branch") `
+    "Could not push branch $branch to origin. Resolve the Git error before publishing the release."
+
+$releaseArguments = @('release', 'create', $tagName) +
+    @($releaseFiles + (Join-Path $releaseRoot 'SHA256SUMS.txt') | Sort-Object | ForEach-Object { [IO.Path]::GetFullPath($_) }) +
+    @('--repo', $repository, '--title', "BGInfoPlus $tagName", '--generate-notes')
+
+if ($remoteTag.Count -gt 0) {
+    $releaseArguments += '--verify-tag'
+} else {
+    $releaseArguments += @('--target', $headCommit)
+}
+
+Invoke-Checked $gh.Source $releaseArguments "GitHub release $tagName could not be created."
+Invoke-Checked 'git' @('-C', $repositoryRoot, 'fetch', 'origin', 'tag', $tagName, '--no-tags') `
+    "GitHub release was created, but local tag $tagName could not be fetched."
+Write-Host "GitHub release created: https://github.com/$repository/releases/tag/$tagName"

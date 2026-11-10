@@ -30,7 +30,9 @@ Create a versioned release with:
 ./tools/Build-Release.ps1 -Version 1.2.2
 ```
 
-The version must match `Version` in `BGInfoPlus.csproj`. The script calls `tools/Test-BGInfoPlus.ps1`, publishes the executable, generates the default configuration, builds the MSI, and creates the MSI, standalone EXE, portable ZIP, Azure VM Application ZIP, default configuration JSON, command manifest, and SHA-256 checksums under `artifacts/release/v<version>`. It recreates that version directory, so use a new version rather than storing other files there. Pushing a matching version tag builds and publishes the same artifacts through `.github/workflows/release.yml`.
+The version must match `Version` in `BGInfoPlus.csproj`. The script calls `tools/Test-BGInfoPlus.ps1`, publishes the executable, generates the default configuration, builds the MSI, and creates the MSI, standalone EXE, portable ZIP, Azure VM Application ZIP, default configuration JSON, command manifest, and SHA-256 checksums under `artifacts/release/v<version>`. It recreates that version directory, so use a new version rather than storing other files there.
+
+After validation, the script asks whether to create the matching GitHub release. Answering yes requires a clean worktree, a checked-out branch, an authenticated GitHub CLI (`gh auth login`), and an `origin` remote on GitHub. It pushes the current branch, refuses to move an existing tag, creates `v<version>`, and uploads every validated artifact. Use `-SkipGitHubRelease` for non-interactive automation. The tagged GitHub Actions workflow uses that switch and safely refreshes release assets if the local workflow created the release first.
 
 To remove compiled release directories older than the newest release and its two predecessors, review the targets and then run the cleanup:
 

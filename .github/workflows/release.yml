@@ -20,14 +20,20 @@ jobs:
         shell: pwsh
         run: |
           $version = '${{ github.ref_name }}'.TrimStart('v')
-          ./tools/Build-Release.ps1 -Version $version
+          ./tools/Build-Release.ps1 -Version $version -SkipGitHubRelease
       - name: Create GitHub release
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           $assets = Get-ChildItem 'artifacts/release/${{ github.ref_name }}' -File | ForEach-Object FullName
-          gh release create '${{ github.ref_name }}' @assets `
-            --verify-tag `
-            --title 'BGInfoPlus ${{ github.ref_name }}' `
-            --generate-notes
+          $tag = '${{ github.ref_name }}'
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag @assets --clobber
+          } else {
+            gh release create $tag @assets `
+              --verify-tag `
+              --title "BGInfoPlus $tag" `
+              --generate-notes
+          }
