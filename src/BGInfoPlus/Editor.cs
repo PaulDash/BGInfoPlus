@@ -20,8 +20,8 @@ internal sealed class Editor : Window
     private readonly RichTextBox editor = new() { AcceptsTab = true, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, BorderThickness = new Thickness(0) };
     private readonly ListBox placeholders = new() { MinHeight = 120 };
     private readonly TextBlock status = new() { Foreground = UITheme.SecondaryTextBrush, TextWrapping = TextWrapping.Wrap };
-    private readonly CheckBox runAtSignIn = new() { Content = "Always apply at login", Foreground = UITheme.TextBrush, IsChecked = false, Margin = new Thickness(8, 8, 0, 0) };
-    private readonly ComboBox resolutions = new() { Width = 170, Height = 34, Margin = new Thickness(0, 0, 10, 0), VerticalContentAlignment = VerticalAlignment.Center, Padding = new Thickness(8, 0, 4, 0) };
+    private readonly CheckBox runAtSignIn = new() { Content = "Apply at login", Foreground = UITheme.TextBrush, IsChecked = false, Margin = new Thickness(8, 8, 0, 0) };
+    private readonly ComboBox resolutions = new() { Width = 170, Height = 34, HorizontalAlignment = HorizontalAlignment.Left, VerticalContentAlignment = VerticalAlignment.Center, Padding = new Thickness(8, 0, 4, 0) };
     private readonly List<DisplayResolution> availableResolutions = [];
     private readonly List<PlaceholderDefinition> definitions = [];
     private ConfigurationScope loadedScope = ConfigurationScope.BuiltIn;
@@ -33,7 +33,7 @@ internal sealed class Editor : Window
     public Editor()
     {
         var availableHeight = Math.Max(620, SystemParameters.WorkArea.Height - 48);
-        Title = "BGInfoPlus"; Width = 1180; Height = Math.Min(900, availableHeight); MinWidth = 900; MinHeight = 620;
+        Title = "BGInfoPlus"; Width = 1180; Height = Math.Min(900, availableHeight); MinWidth = 1080; MinHeight = 620;
         Icon = ApplicationIcon.Create();
         UITheme.Apply(this);
         PopulateResolutions();
@@ -63,6 +63,11 @@ internal sealed class Editor : Window
     private UIElement BuildHelperPanel()
     {
         var panel = new StackPanel();
+        panel.Children.Add(new TextBlock { Text = "Image setup", FontSize = 18, FontWeight = FontWeights.SemiBold, Foreground = UITheme.TextBrush });
+        panel.Children.Add(new TextBlock { Text = "Output resolution", Foreground = UITheme.SecondaryTextBrush, Margin = new Thickness(0, 8, 0, 6) });
+        resolutions.ToolTip = "Wallpaper output resolution";
+        resolutions.Margin = new Thickness(0, 0, 0, 18);
+        panel.Children.Add(resolutions);
         panel.Children.Add(new TextBlock { Text = "Insert data", FontSize = 18, FontWeight = FontWeights.SemiBold, Foreground = UITheme.TextBrush });
         panel.Children.Add(new TextBlock { Text = "Choose a helper, then insert one or more named placeholders at the caret.", TextWrapping = TextWrapping.Wrap, Foreground = UITheme.SecondaryTextBrush, Margin = new Thickness(0, 4, 0, 16) });
         foreach (var (title, action) in new (string, Action)[]
@@ -207,24 +212,25 @@ internal sealed class Editor : Window
 
     private UIElement BuildActions()
     {
+        const double actionButtonWidth = 156;
         var bar = new Grid { HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 16, 0, 0) };
-        for (var i = 0; i < 5; i++) bar.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        for (var i = 0; i < 4; i++) bar.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         bar.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); bar.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        resolutions.ToolTip = "Wallpaper output resolution";
-        resolutions.VerticalAlignment = VerticalAlignment.Top; Grid.SetColumn(resolutions, 0); bar.Children.Add(resolutions);
-        var preview = new Button { Content = "Preview", Height = 34, MinWidth = 88, Margin = new Thickness(8, 0, 0, 0) }; preview.Click += async (_, _) => await PreviewAsync();
-        Grid.SetColumn(preview, 1); bar.Children.Add(preview);
-        var apply = new Button { Content = "Apply wallpaper", Height = 34, MinWidth = 128, Margin = new Thickness(8, 0, 0, 0), Style = UITheme.AccentButtonStyle() }; apply.Click += async (_, _) => await ApplyAsync();
-        Grid.SetColumn(apply, 2); bar.Children.Add(apply);
-        var export = new Button { Content = "Export image…", Height = 34, MinWidth = 112, Margin = new Thickness(8, 0, 0, 0) }; export.Click += async (_, _) => await ExportAsync();
+        var actionMargin = new Thickness(4, 0, 4, 0);
+        var secondaryActionMargin = new Thickness(4, 6, 4, 0);
+        var preview = new Button { Content = "Preview", Width = actionButtonWidth, Height = 34, Margin = actionMargin }; preview.Click += async (_, _) => await PreviewAsync();
+        Grid.SetColumn(preview, 0); bar.Children.Add(preview);
+        var apply = new Button { Content = "Apply now", Width = actionButtonWidth, Height = 34, Margin = actionMargin, Style = UITheme.AccentButtonStyle() }; apply.Click += async (_, _) => await ApplyAsync();
+        Grid.SetColumn(apply, 1); bar.Children.Add(apply);
+        var deploy = new Button { Content = "Apply to all users", Width = actionButtonWidth, Height = 34, Margin = actionMargin, ToolTip = "Save this design as the machine-wide template and apply it whenever any user signs in" };
+        deploy.Click += async (_, _) => await DeployForAllUsersAsync(); Grid.SetColumn(deploy, 2); bar.Children.Add(deploy);
+        var export = new Button { Content = "Export image…", Width = actionButtonWidth, Height = 34, Margin = actionMargin }; export.Click += async (_, _) => await ExportAsync();
         Grid.SetColumn(export, 3); bar.Children.Add(export);
-        var deploy = new Button { Content = "Deploy for all users…", Height = 34, MinWidth = 156, Margin = new Thickness(8, 0, 0, 0), ToolTip = "Save this design as the machine-wide template and apply it whenever any user signs in" };
-        deploy.Click += async (_, _) => await DeployForAllUsersAsync(); Grid.SetColumn(deploy, 4); bar.Children.Add(deploy);
-        Grid.SetColumn(runAtSignIn, 2); Grid.SetRow(runAtSignIn, 1); bar.Children.Add(runAtSignIn);
-        var importConfiguration = new Button { Content = "Import config…", Height = 30, MinWidth = 112, Margin = new Thickness(8, 6, 0, 0), ToolTip = "Load a JSON configuration into the editor without saving it" };
-        importConfiguration.Click += (_, _) => ImportConfiguration(); Grid.SetColumn(importConfiguration, 3); Grid.SetRow(importConfiguration, 1); bar.Children.Add(importConfiguration);
-        var exportConfiguration = new Button { Content = "Export config…", Height = 30, MinWidth = 112, Margin = new Thickness(8, 6, 0, 0), ToolTip = "Export this editable layout and its placeholder mappings as a JSON configuration" };
-        exportConfiguration.Click += (_, _) => ExportConfiguration(); Grid.SetColumn(exportConfiguration, 4); Grid.SetRow(exportConfiguration, 1); bar.Children.Add(exportConfiguration);
+        Grid.SetColumn(runAtSignIn, 1); Grid.SetRow(runAtSignIn, 1); bar.Children.Add(runAtSignIn);
+        var importConfiguration = new Button { Content = "Import config…", Width = actionButtonWidth, Height = 34, Margin = secondaryActionMargin, ToolTip = "Load a JSON configuration into the editor without saving it" };
+        importConfiguration.Click += (_, _) => ImportConfiguration(); Grid.SetColumn(importConfiguration, 2); Grid.SetRow(importConfiguration, 1); bar.Children.Add(importConfiguration);
+        var exportConfiguration = new Button { Content = "Export config…", Width = actionButtonWidth, Height = 34, Margin = secondaryActionMargin, ToolTip = "Export this editable layout and its placeholder mappings as a JSON configuration" };
+        exportConfiguration.Click += (_, _) => ExportConfiguration(); Grid.SetColumn(exportConfiguration, 3); Grid.SetRow(exportConfiguration, 1); bar.Children.Add(exportConfiguration);
         return bar;
     }
 

@@ -32,6 +32,15 @@ Create a versioned release with:
 
 The version must match `Version` in `BGInfoPlus.csproj`. The script calls `tools/Test-BGInfoPlus.ps1`, publishes the executable, generates the default configuration, builds the MSI, and creates the MSI, standalone EXE, portable ZIP, Azure VM Application ZIP, default configuration JSON, command manifest, and SHA-256 checksums under `artifacts/release/v<version>`. It recreates that version directory, so use a new version rather than storing other files there. Pushing a matching version tag builds and publishes the same artifacts through `.github/workflows/release.yml`.
 
+To remove compiled release directories older than the newest release and its two predecessors, review the targets and then run the cleanup:
+
+```powershell
+./tools/Clean-ReleaseArtifacts.ps1 -WhatIf
+./tools/Clean-ReleaseArtifacts.ps1 -Confirm:$false
+```
+
+Only directories matching `artifacts/release/v<major>.<minor>.<patch>` are considered. Non-versioned directories and filesystem links are left untouched. Use `-KeepPrevious <count>` to retain a different number of predecessors.
+
 ## Azure VM Application
 
 Each published version has a default configuration link. On a new VM install, BGInfoPlus validates that configuration, installs it as enforced AllUsers scope, secures it for ordinary-user read access, and registers the machine logon task. A VM's `configurationReference` overrides the version default. The downloaded configuration is named `BGInfoPlus-config.json` and is passed to the installer.
