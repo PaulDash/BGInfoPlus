@@ -94,6 +94,24 @@ function Assert-Name {
     if ($Value -notmatch $Pattern) { throw "$Description is invalid: $Value" }
 }
 
+function ConvertTo-OptionalConfigurationCommand {
+    param(
+        [Parameter(Mandatory)] [string]$Command,
+        [Parameter(Mandatory)] [string]$ConfigurationFileName
+    )
+    $conditionalMarker = "if (Test-Path '.\$ConfigurationFileName' -PathType Leaf)"
+    if ($Command.Contains($conditionalMarker, [StringComparison]::Ordinal)) { return $Command }
+
+    # Normalize manifests produced before the gallery default was removed. This
+    # changes only the command sent to Azure; it never rewrites the release file.
+    $requiredAction = "& '.\BGInfoPlus-payload\Install-BGInfoPlus.ps1' -ConfigurationPath '.\$ConfigurationFileName'"
+    if (-not $Command.Contains($requiredAction, [StringComparison]::Ordinal)) {
+        throw 'The release manifest has an unsupported VM Application install command. Rebuild the release package.'
+    }
+    $optionalAction = "$conditionalMarker { $requiredAction } else { & '.\BGInfoPlus-payload\Install-BGInfoPlus.ps1' }"
+    return $Command.Replace($requiredAction, $optionalAction, [StringComparison]::Ordinal)
+}
+
 Clear-Host
 Write-Host 'BGInfoPlus — Azure Compute Gallery VM Application publisher' -ForegroundColor Cyan
 Write-Host 'This wizard discovers Azure resources at runtime. It does not write subscription IDs, resource names, URLs, credentials, SAS values, or your answers into the script or local settings.'
@@ -126,14 +144,12 @@ if (-not (Test-Path -LiteralPath $defaultPackage)) {
 }
 $packagePath = [IO.Path]::GetFullPath((Read-Required 'VM Application ZIP path' $defaultPackage))
 if (-not (Test-Path -LiteralPath $packagePath -PathType Leaf)) { throw "Package not found: $packagePath" }
-$configurationPath = Join-Path ([IO.Path]::GetDirectoryName($packagePath)) 'DefaultConfig.json'
-if (-not (Test-Path -LiteralPath $configurationPath -PathType Leaf)) {
-    throw "The default configuration artifact was not found at $configurationPath. Rebuild the release package."
-}
 $manifestPath = Join-Path ([IO.Path]::GetDirectoryName($packagePath)) 'azure-vm-application.json'
 if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) { throw "Manifest not found beside package: $manifestPath" }
 $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
 if ($manifest.version -ne $version) { throw "Package version $($manifest.version) does not match project version $version." }
+$manifest.installCommand = ConvertTo-OptionalConfigurationCommand $manifest.installCommand $manifest.configurationFileName
+$manifest.updateCommand = ConvertTo-OptionalConfigurationCommand $manifest.updateCommand $manifest.configurationFileName
 
 $subscriptions = @(Invoke-AzJson @('account', 'list', '--query', "[?state=='Enabled']"))
 if ($subscriptions.Count -eq 0) { throw 'No enabled Azure subscriptions are available.' }
@@ -183,7 +199,6 @@ $storageAccountName = $null
 $storageResourceGroup = $null
 $createStorage = $false
 $packageUri = $null
-$configurationUri = $null
 $containerName = 'vm-applications'
 if ($method -eq '1') {
     $storageAccounts = @(Invoke-AzJson @('storage', 'account', 'list', '--query', '[].{name:name,resourceGroup:resourceGroup,location:primaryLocation}'))
@@ -204,10 +219,6 @@ if ($method -eq '1') {
     $packageUri = Read-Required 'Plain HTTPS blob URL for the VM Application ZIP'
     if (-not [Uri]::IsWellFormedUriString($packageUri, [UriKind]::Absolute) -or -not $packageUri.StartsWith('https://', [StringComparison]::OrdinalIgnoreCase)) {
         throw 'The package URL must be an absolute HTTPS URL.'
-    }
-    $configurationUri = Read-Required 'Plain HTTPS blob URL for the default BGInfoPlus configuration'
-    if (-not [Uri]::IsWellFormedUriString($configurationUri, [UriKind]::Absolute) -or -not $configurationUri.StartsWith('https://', [StringComparison]::OrdinalIgnoreCase)) {
-        throw 'The default configuration URL must be an absolute HTTPS URL.'
     }
 }
 
@@ -231,6 +242,8 @@ if ($method -eq '1') {
 } else {
     Write-Host '  Ingestion security: gallery managed identity with plain blob URL'
 }
+Write-Host '  Default configuration: packaged application fallback (no separate gallery configuration)'
+Write-Host '  VM-specific config:    supported later through configurationReference'
 if (-not (Read-YesNo 'Proceed with these Azure changes?' $false)) { Write-Host 'Cancelled. No publication changes were made.'; return }
 
 if ($createResourceGroup) { Invoke-AzQuiet @('group', 'create', '--name', $resourceGroupName, '--location', $location) }
@@ -251,15 +264,10 @@ if ($method -eq '1') {
         Invoke-AzQuiet @('storage', 'container', 'create', '--name', $containerName, '--account-name', $storageAccountName, '--auth-mode', 'login')
         $blobName = [IO.Path]::GetFileName($packagePath)
         Invoke-AzQuiet @('storage', 'blob', 'upload', '--account-name', $storageAccountName, '--container-name', $containerName, '--name', $blobName, '--file', $packagePath, '--type', 'page', '--overwrite', 'true', '--auth-mode', 'login')
-        $configurationBlobName = "BGInfoPlus-$version-config.json"
-        Invoke-AzQuiet @('storage', 'blob', 'upload', '--account-name', $storageAccountName, '--container-name', $containerName, '--name', $configurationBlobName, '--file', $configurationPath, '--overwrite', 'true', '--auth-mode', 'login')
         $expiry = [DateTime]::UtcNow.AddDays(7).ToString('yyyy-MM-ddTHH:mmZ')
         $sas = (Invoke-AzCli @('storage', 'blob', 'generate-sas', '--account-name', $storageAccountName, '--container-name', $containerName, '--name', $blobName, '--permissions', 'r', '--expiry', $expiry, '--https-only', '--auth-mode', 'login', '--as-user', '--subscription', $subscription.id, '--only-show-errors', '--output', 'tsv') 2>$null)
         if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($sas)) { throw 'SAS generation failed.' }
         $packageUri = "https://$storageAccountName.blob.core.windows.net/$containerName/$blobName`?$sas"
-        $configurationSas = (Invoke-AzCli @('storage', 'blob', 'generate-sas', '--account-name', $storageAccountName, '--container-name', $containerName, '--name', $configurationBlobName, '--permissions', 'r', '--expiry', $expiry, '--https-only', '--auth-mode', 'login', '--as-user', '--subscription', $subscription.id, '--only-show-errors', '--output', 'tsv') 2>$null)
-        if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($configurationSas)) { throw 'Default configuration SAS generation failed.' }
-        $configurationUri = "https://$storageAccountName.blob.core.windows.net/$containerName/$configurationBlobName`?$configurationSas"
     }
     catch {
         throw "Storage access failed. Grant the signed-in identity 'Storage Blob Data Contributor' on the account, wait for role propagation, and run the wizard again. $($_.Exception.Message)"
@@ -279,7 +287,6 @@ Invoke-AzQuiet -ContainsSecret @('sig', 'gallery-application', 'version', 'creat
     '--location', $location,
     '--package-file-link', $packageUri,
     '--package-file-name', $manifest.packageFileName,
-    '--default-configuration-file-link', $configurationUri,
     '--config-file-name', $manifest.configurationFileName,
     '--install-command', $manifest.installCommand,
     '--update-command', $manifest.updateCommand,

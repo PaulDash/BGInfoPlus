@@ -24,6 +24,26 @@ Get-ChildItem -LiteralPath (Join-Path $repositoryRoot 'tools'), (Join-Path $repo
     }
 if ($parseFailures.Count) { throw "PowerShell parse failures:`n$($parseFailures -join "`n")" }
 
+$publisherSource = Get-Content -LiteralPath (Join-Path $repositoryRoot 'tools\Publish-AzureVmApplication.ps1') -Raw
+foreach ($obsoletePublisherToken in @('default-configuration-file-link', 'default BGInfoPlus configuration', '$configurationUri')) {
+    if ($publisherSource.Contains($obsoletePublisherToken, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "The Azure VM Application publisher still handles an obsolete default configuration: $obsoletePublisherToken"
+    }
+}
+$publisherAst = [Management.Automation.Language.Parser]::ParseInput($publisherSource, [ref]$null, [ref]$null)
+$converterAst = $publisherAst.Find({
+    param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and
+        $node.Name -eq 'ConvertTo-OptionalConfigurationCommand'
+}, $true)
+if (-not $converterAst) { throw 'The Azure VM Application optional-configuration converter is missing.' }
+. ([scriptblock]::Create($converterAst.Extent.Text))
+$legacyInstallCommand = "prefix; & '.\BGInfoPlus-payload\Install-BGInfoPlus.ps1' -ConfigurationPath '.\BGInfoPlus-config.json'; suffix"
+$optionalInstallCommand = ConvertTo-OptionalConfigurationCommand $legacyInstallCommand 'BGInfoPlus-config.json'
+if ($optionalInstallCommand -notlike "*if (Test-Path '.\BGInfoPlus-config.json' -PathType Leaf)*" -or
+    $optionalInstallCommand -notlike '*else {*Install-BGInfoPlus.ps1*}*') {
+    throw 'The publisher did not make an existing release manifest configuration optional.'
+}
+
 & (Join-Path $repositoryRoot 'packaging\azure-vm-application\Deploy-BGInfoPlusForAllUsers.ps1') -ValidateOnly
 if (-not $?) { throw 'The interactive logon task definition is invalid.' }
 

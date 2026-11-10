@@ -47,6 +47,11 @@ $manifest = Get-Content -LiteralPath (Join-Path $releaseRoot 'azure-vm-applicati
     ConvertFrom-Json -ErrorAction Stop
 if ($manifest.version -ne $Version -or $manifest.packageFileName -ne "BGInfoPlus-$Version-azure-vmapp.zip" -or
     $manifest.configurationFileName -ne 'BGInfoPlus-config.json') { throw 'The Azure VM Application manifest is inconsistent.' }
+if ($manifest.installCommand -notlike "*if (Test-Path '.\BGInfoPlus-config.json' -PathType Leaf)*" -or
+    $manifest.installCommand -notlike "*-ConfigurationPath '.\BGInfoPlus-config.json'*" -or
+    $manifest.updateCommand -ne $manifest.installCommand) {
+    throw 'The Azure VM Application commands do not handle an optional deployment configuration safely.'
+}
 
 $installer = New-Object -ComObject WindowsInstaller.Installer
 $database = $null

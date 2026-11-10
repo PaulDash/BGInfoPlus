@@ -22,7 +22,7 @@ Use **Import config…** and **Export config…** to exchange reusable JSON layo
 
 **Always apply at login** regenerates the current user's wallpaper at sign-in.
 
-All scopes use the same validated JSON format. Personal configuration is stored under `%LOCALAPPDATA%`, the optional fallback travels with the application, and only enforced all-users policy is stored under `%ProgramData%`. MSI installation provisions `DefaultConfig.json` and the logon task automatically. Azure VM Application installation provisions its supplied configuration as enforced all-users policy.
+All scopes use the same validated JSON format. Personal configuration is stored under `%LOCALAPPDATA%`, the optional fallback travels with the application, and only enforced all-users policy is stored under `%ProgramData%`. MSI and Azure VM Application installation provision the packaged `DefaultConfig.json` and logon task automatically. An Azure deployment can explicitly supply a `configurationReference` to install enforced all-users policy instead.
 
 ## Build and Test
 

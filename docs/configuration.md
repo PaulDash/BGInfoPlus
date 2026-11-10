@@ -101,6 +101,6 @@ Configuration files are limited to 4 MiB, documents to 1,048,576 characters, pla
 
 ## Installation and removal
 
-The MSI installs its release `DefaultConfig.json` beside the executable and registers the machine task. Users may create personal files that override it. The Azure VM Application carries the same local fallback but installs its version default or VM `configurationReference` as enforced AllUsers scope.
+The MSI and Azure VM Application install their packaged `DefaultConfig.json` beside the executable and register the machine task. Users may create personal files that override this fallback. An Azure VM Application deployment installs enforced AllUsers scope only when it explicitly supplies a `configurationReference`.
 
-Installer-managed hashes allow Azure VM Application upgrades to refresh unchanged enforced policy while preserving a file an administrator modified after installation. Uninstall removes installed application files, machine policy, the machine task, and BGInfoPlus Startup shortcuts. Personal JSON files, generated wallpapers, and logs are preserved.
+Installer-managed hashes allow Azure VM Application upgrades with `configurationReference` to refresh unchanged enforced policy while preserving a file an administrator modified after installation. An update without a deployment configuration preserves existing policy. Uninstall removes installed application files, machine policy, the machine task, and BGInfoPlus Startup shortcuts. Personal JSON files, generated wallpapers, and logs are preserved.

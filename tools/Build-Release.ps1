@@ -108,7 +108,7 @@ Compress-Archive -Path (Join-Path $vmStage '*') -DestinationPath $vmPackage -Com
 
 $expand = "if (Test-Path '.\BGInfoPlus-payload') { Remove-Item -LiteralPath '.\BGInfoPlus-payload' -Recurse -Force }; Expand-Archive -LiteralPath '.\$vmPackageName' -DestinationPath '.\BGInfoPlus-payload' -Force"
 $configurationFileName = 'BGInfoPlus-config.json'
-$installAction = "& '.\BGInfoPlus-payload\Install-BGInfoPlus.ps1' -ConfigurationPath '.\$configurationFileName'"
+$installAction = "if (Test-Path '.\$configurationFileName' -PathType Leaf) { & '.\BGInfoPlus-payload\Install-BGInfoPlus.ps1' -ConfigurationPath '.\$configurationFileName' } else { & '.\BGInfoPlus-payload\Install-BGInfoPlus.ps1' }"
 $removeAction = "& '.\BGInfoPlus-payload\Remove-BGInfoPlus.ps1'"
 $installCommand = "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command `"try { $expand; $installAction } catch { Write-Error `$_; exit 1 }`""
 $removeCommand = "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command `"try { $expand; $removeAction } catch { Write-Error `$_; exit 1 }`""

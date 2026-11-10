@@ -12,7 +12,7 @@ C:\Program Files\BGInfoPlus\BGInfoPlus.exe
 
 Do not prepare the image from the standalone EXE because it does not include the all-users deployment helper. Do not place the portable package in a profile or temporary directory; the scheduled task must still be able to find it after Sysprep.
 
-MSI setup places `DefaultConfig.json` beside the executable and registers the logon task. Azure VM Application setup provides an enforced all-users configuration and the same task. See [Configuration model](configuration.md) and [Installation and Deployment](deployment.md) for precedence, overrides, and update behavior.
+MSI and Azure VM Application setup place `DefaultConfig.json` beside the executable and register the logon task. An Azure deployment provides enforced all-users configuration only when it explicitly supplies `configurationReference`. See [Configuration model](configuration.md) and [Installation and Deployment](deployment.md) for precedence, overrides, and update behavior.
 
 ## 2. Design and test the wallpaper
 
@@ -31,7 +31,7 @@ Choose the desired behavior before generalizing the image:
 - For an editable starting design, select **Export config…** and copy the exported file to the application directory as `DefaultConfig.json`. MSI setup has already registered the logon task. For a portable installation, run `Deploy-BGInfoPlusForAllUsers.ps1 -PreserveConfiguration` once from an elevated prompt after copying the file.
 - Select **Deploy for all users…** if the design must be enforced for every user. This is normally preferable for consistent student lab desktops.
 
-Approve elevation when registering the portable task or deploying enforced policy. On a new MSI install, the release fallback and task are already provisioned; on a new Azure VM Application install, its release or VM-specific configuration is already enforced. The deployment helper:
+Approve elevation when registering the portable task or deploying enforced policy. On a new MSI or Azure VM Application install, the packaged fallback and task are already provisioned. A VM-specific configuration is enforced only when the Azure deployment supplies `configurationReference`. The deployment helper:
 
 - optionally writes the validated design to the enforced ProgramData JSON path;
 - grants ordinary users read-only access to that directory;

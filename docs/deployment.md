@@ -45,9 +45,9 @@ Only directories matching `artifacts/release/v<major>.<minor>.<patch>` are consi
 
 ## Azure VM Application
 
-Each published version has a default configuration link. On a new VM install, BGInfoPlus validates that configuration, installs it as enforced AllUsers scope, secures it for ordinary-user read access, and registers the machine logon task. A VM's `configurationReference` overrides the version default. The downloaded configuration is named `BGInfoPlus-config.json` and is passed to the installer.
+Each VM Application package contains `DefaultConfig.json`, which is installed beside `BGInfoPlus.exe` as the editable application fallback. The gallery version does not publish a separate default configuration link. If a VM deployment supplies `configurationReference`, Azure downloads it as `BGInfoPlus-config.json`; the install command detects it and installs it as enforced AllUsers policy. Without that explicit override, installation uses the packaged fallback and registers the machine logon task.
 
-On update, an unchanged app-managed template is refreshed from the supplied configuration. If an administrator has modified or redeployed the enforced template, the update preserves it. To change a custom design, edit it and select **Deploy for all users…** again. Removal deletes the machine task and machine templates but preserves each user's private configuration and wallpaper.
+On update, a supplied `configurationReference` refreshes an unchanged app-managed template. If no deployment configuration is supplied, or an administrator has modified or redeployed the enforced template, the update preserves it. To change a custom design, edit it and select **Deploy for all users…** again. Removal deletes the machine task and machine templates but preserves each user's private configuration and wallpaper.
 
 Publish a release package with the interactive wizard:
 
@@ -55,7 +55,7 @@ Publish a release package with the interactive wizard:
 ./tools/Publish-AzureVmApplication.ps1
 ```
 
-The wizard requires `DefaultConfig.json` beside the VM Application ZIP. The storage-upload path uploads both files and creates seven-day, read-only user-delegation SAS URLs. The signed-in identity needs `Storage Blob Data Contributor` and `Storage Blob Delegator` on the storage account, plus access to the selected resource group. The managed-identity path asks for plain HTTPS blob URLs for both files; the gallery's user-assigned identity must be able to read them. The wizard reviews the plan before making Azure changes and does not save resource details or SAS values to the repository.
+The storage-upload path uploads only the VM Application ZIP and creates a seven-day, read-only user-delegation SAS URL. The signed-in identity needs `Storage Blob Data Contributor` and `Storage Blob Delegator` on the storage account, plus access to the selected resource group. The managed-identity path asks only for the package's plain HTTPS blob URL; the gallery's user-assigned identity must be able to read it. The wizard reviews the plan before making Azure changes and does not save resource details or SAS values to the repository.
 
 Deploy the replicated version to a VM with failure propagation enabled:
 
@@ -68,7 +68,7 @@ az vm application set `
   --treat-deployment-as-failure true
 ```
 
-Only one version of a given VM Application can be assigned to a VM at a time. The VM needs the Azure VM Agent, and the application version must be replicated to its region. For a VM-specific design, set `configurationReference` on that VM's gallery application profile; it takes precedence over the version default. See Microsoft's guidance for [creating and deploying VM Applications](https://learn.microsoft.com/azure/virtual-machines/vm-applications-how-to) and [publishing with managed identity](https://learn.microsoft.com/azure/virtual-machines/vm-applications-publish-with-managed-identity).
+Only one version of a given VM Application can be assigned to a VM at a time. The VM needs the Azure VM Agent, and the application version must be replicated to its region. For an enforced VM-specific design, set `configurationReference` on that VM's gallery application profile. If it is omitted, BGInfoPlus uses the editable fallback packaged inside the application. See Microsoft's guidance for [creating and deploying VM Applications](https://learn.microsoft.com/azure/virtual-machines/vm-applications-how-to) and [publishing with managed identity](https://learn.microsoft.com/azure/virtual-machines/vm-applications-publish-with-managed-identity).
 
 ## Files and Troubleshooting
 
