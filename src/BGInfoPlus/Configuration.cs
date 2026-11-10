@@ -1,7 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Runtime.InteropServices;
-using Microsoft.Win32;
 using System.IO;
 
 namespace BGInfoPlus;
@@ -43,31 +42,17 @@ internal static class ConfigurationStore
 
     // Both UI and automatic paths show/use the same effective design: enforced all-users
     // policy first, then the user's file, then the application-local fallback.
-    public static ResolvedConfiguration LoadForEditor()
-    {
-        MigrateLegacyRegistryConfiguration();
-        return ConfigurationResolver.ResolveForEditor(UserPath, AllUsersPath, DefaultPath)
-            ?? new ResolvedConfiguration(ConfigurationFileStore.CreateDefault(), ConfigurationScope.BuiltIn, null);
-    }
+    public static ResolvedConfiguration LoadForEditor() =>
+        ConfigurationResolver.ResolveForEditor(UserPath, AllUsersPath, DefaultPath)
+        ?? new ResolvedConfiguration(ConfigurationFileStore.CreateDefault(), ConfigurationScope.BuiltIn, null);
 
-    public static ResolvedConfiguration? LoadForAutomaticApply()
-    {
-        MigrateLegacyRegistryConfiguration();
-        return ConfigurationResolver.ResolveForAutomaticApply(UserPath, AllUsersPath, DefaultPath);
-    }
+    public static ResolvedConfiguration? LoadForAutomaticApply() =>
+        ConfigurationResolver.ResolveForAutomaticApply(UserPath, AllUsersPath, DefaultPath);
 
     public static void SaveUser(AppConfiguration configuration)
     {
         ConfigurationFileStore.Save(UserPath, configuration);
         UserStartupRegistration.SetEnabled(configuration.RunAtSignIn);
-    }
-
-    public static bool HasMachineLogonConfiguration => File.Exists(AllUsersPath);
-
-    private static void MigrateLegacyRegistryConfiguration()
-    {
-        if (File.Exists(UserPath)) return;
-        LegacyRegistryConfiguration.TryMigrate(UserPath, !HasMachineLogonConfiguration);
     }
 }
 
@@ -76,7 +61,8 @@ internal static class ConfigurationFileStore
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true,
-        Converters = { new JsonStringEnumConverter() }
+        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
+        Converters = { new JsonStringEnumConverter(namingPolicy: null, allowIntegerValues: false) }
     };
 
     public static AppConfiguration CreateDefault() => new(
@@ -165,61 +151,6 @@ internal static class UserStartupRegistration
         shortcutPath = Path.GetFullPath(shortcutPath);
         executable = Path.GetFullPath(executable);
         Directory.CreateDirectory(Path.GetDirectoryName(shortcutPath)!);
-        var shellType = Type.GetTypeFromProgID("WScript.Shell")
-            ?? throw new PlatformNotSupportedException("Windows Script Host is unavailable.");
-        dynamic? shell = null;
-        dynamic? shortcut = null;
-        try
-        {
-            shell = Activator.CreateInstance(shellType) ?? throw new InvalidOperationException("Windows Script Host could not be started.");
-            shortcut = shell.CreateShortcut(shortcutPath);
-            shortcut.TargetPath = executable;
-            shortcut.Arguments = "--apply";
-            shortcut.WorkingDirectory = Path.GetDirectoryName(executable)!;
-            shortcut.IconLocation = executable + ",0";
-            shortcut.Description = "Apply the BGInfoPlus wallpaper for the current user";
-            shortcut.Save();
-        }
-        finally
-        {
-            if (shortcut is not null && Marshal.IsComObject(shortcut)) Marshal.FinalReleaseComObject(shortcut);
-            if (shell is not null && Marshal.IsComObject(shell)) Marshal.FinalReleaseComObject(shell);
-        }
-    }
-}
-
-internal static class LegacyRegistryConfiguration
-{
-    private const string KeyPath = @"Software\BGInfoPlus";
-    private const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
-
-    public static void TryMigrate(string userPath, bool createStartupShortcut)
-        => TryMigrate(userPath, createStartupShortcut, KeyPath, RunKeyPath);
-
-    internal static void TryMigrate(string userPath, bool createStartupShortcut, string keyPath, string runKeyPath)
-    {
-        AppConfiguration? configuration;
-        using (var key = Registry.CurrentUser.OpenSubKey(keyPath))
-        {
-            var document = key?.GetValue("Document") as string;
-            if (string.IsNullOrWhiteSpace(document)) return;
-            var placeholderJson = key?.GetValue("Placeholders") as string ?? "[]";
-            if (placeholderJson.Length > AppLimits.MaxPlaceholderJsonCharacters)
-                throw new InvalidDataException("The legacy placeholder configuration is too large.");
-            var placeholders = JsonSerializer.Deserialize<PlaceholderDefinition[]>(placeholderJson) ?? [];
-            var current = ScreenResolution.Current;
-            configuration = new AppConfiguration(document, placeholders,
-                (key?.GetValue("RunAtSignIn") as int? ?? 0) != 0,
-                key?.GetValue("ImageWidth") is int width ? width : current.Width,
-                key?.GetValue("ImageHeight") is int height ? height : current.Height,
-                key?.GetValue("BackgroundColor") as string ?? "#0F172A");
-        }
-        AppLimits.Validate(configuration);
-
-        // Save and establish the replacement startup mechanism before deleting the old data.
-        ConfigurationFileStore.Save(userPath, configuration);
-        UserStartupRegistration.SetEnabled(createStartupShortcut && configuration.RunAtSignIn);
-        using (var run = Registry.CurrentUser.OpenSubKey(runKeyPath, writable: true)) run?.DeleteValue("BGInfoPlus", false);
-        Registry.CurrentUser.DeleteSubKeyTree(keyPath, throwOnMissingSubKey: false);
+        ShellLinkInterop.Create(shortcutPath, executable);
     }
 }

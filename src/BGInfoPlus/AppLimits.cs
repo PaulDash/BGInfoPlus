@@ -13,12 +13,12 @@ internal static class AppLimits
     public const int MaxDocumentBytes = 768 * 1024;
     public const int MaxDocumentCharacters = 1024 * 1024;
     public const int MaxPlaceholders = 128;
-    public const int MaxPlaceholderJsonCharacters = 512 * 1024;
     public const int MaxConfigurationFileBytes = 4 * 1024 * 1024;
     public const int MaxResolvedValueCharacters = 4096;
     public const int MaxArgumentCharacters = 4096;
     public const int MaxLabelCharacters = 256;
     private static readonly Regex ValidName = new(@"^[A-Za-z][A-Za-z0-9_.-]{0,63}$", RegexOptions.CultureInvariant);
+    private static readonly Regex ValidColor = new(@"^#[0-9A-Fa-f]{6}$", RegexOptions.CultureInvariant);
 
     public static bool IsValidResolution(int width, int height) =>
         width is >= MinImageWidth and <= MaxImageWidth &&
@@ -45,17 +45,17 @@ internal static class AppLimits
             throw new InvalidDataException("The rich-text document is too large.");
         if (configuration.Placeholders is null || configuration.Placeholders.Length > MaxPlaceholders)
             throw new InvalidDataException($"No more than {MaxPlaceholders} placeholders are allowed.");
-        if (configuration.BackgroundColor is null || configuration.BackgroundColor.Length > 32)
-            throw new InvalidDataException("The wallpaper color is invalid.");
+        if (configuration.BackgroundColor is null || !ValidColor.IsMatch(configuration.BackgroundColor))
+            throw new InvalidDataException("The wallpaper color must use #RRGGBB format.");
         if (!Enum.IsDefined(configuration.WallpaperFit))
             throw new InvalidDataException("The wallpaper fit mode is invalid.");
         foreach (var placeholder in configuration.Placeholders)
         {
             if (placeholder is null) throw new InvalidDataException("A placeholder definition is missing.");
-            if (!ValidName.IsMatch(placeholder.Name)) throw new InvalidDataException("A placeholder name is invalid.");
-            if (placeholder.Label.Length > MaxLabelCharacters) throw new InvalidDataException("A placeholder label is too long.");
-            if (placeholder.Kind.Length > 32) throw new InvalidDataException("A placeholder source name is too long.");
-            if (placeholder.Argument.Length > MaxArgumentCharacters) throw new InvalidDataException("A placeholder argument is too long.");
+            if (placeholder.Name is null || !ValidName.IsMatch(placeholder.Name)) throw new InvalidDataException("A placeholder name is invalid.");
+            if (placeholder.Label is null || placeholder.Label.Length > MaxLabelCharacters) throw new InvalidDataException("A placeholder label is invalid.");
+            if (placeholder.Kind is null || placeholder.Kind.Length > 32) throw new InvalidDataException("A placeholder source name is invalid.");
+            if (placeholder.Argument is null || placeholder.Argument.Length > MaxArgumentCharacters) throw new InvalidDataException("A placeholder argument is invalid.");
         }
     }
 }

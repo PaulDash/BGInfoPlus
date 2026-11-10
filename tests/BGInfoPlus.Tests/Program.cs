@@ -6,7 +6,6 @@ using BGInfoPlus.Core;
 using BGInfoPlus;
 using System.Windows.Documents;
 using System.Windows.Media;
-using Microsoft.Win32;
 
 var count = 0;
 void Check(bool condition, string name) { if (!condition) throw new Exception(name); count++; }
@@ -194,14 +193,51 @@ Check(loadedSharedConfiguration.Document == sharedConfiguration.Document, "Share
 Check(loadedSharedConfiguration.Placeholders.SequenceEqual(sharedConfiguration.Placeholders), "Shared configuration placeholders round-trip");
 Check(loadedSharedConfiguration.RunAtSignIn, "A personal configuration preserves its login preference");
 Check(loadedSharedConfiguration.WallpaperFit == WallpaperFit.Stretch, "Wallpaper fit mode round-trips as configuration data");
-var legacyConfigurationJson = JsonSerializer.Serialize(new
+var configurationWithoutWallpaperFit = JsonSerializer.Serialize(new
 {
     sharedConfiguration.Document, sharedConfiguration.Placeholders, sharedConfiguration.RunAtSignIn,
     sharedConfiguration.ImageWidth, sharedConfiguration.ImageHeight, sharedConfiguration.BackgroundColor
 });
-File.WriteAllText(configurationPath, legacyConfigurationJson);
+File.WriteAllText(configurationPath, configurationWithoutWallpaperFit);
 Check(ConfigurationFileStore.Load(configurationPath).WallpaperFit == WallpaperFit.Fill,
-    "Configuration files from before wallpaper fit support default to Fill");
+    "An omitted optional wallpaper fit mode defaults to Fill");
+
+File.WriteAllText(configurationPath, JsonSerializer.Serialize(new
+{
+    sharedConfiguration.Document, sharedConfiguration.Placeholders, sharedConfiguration.RunAtSignIn,
+    sharedConfiguration.ImageWidth, sharedConfiguration.ImageHeight, sharedConfiguration.BackgroundColor,
+    UnexpectedOption = true
+}));
+var unknownOptionRejected = false;
+try { ConfigurationFileStore.Load(configurationPath); } catch (JsonException) { unknownOptionRejected = true; }
+Check(unknownOptionRejected, "Unknown configuration options are rejected");
+
+File.WriteAllText(configurationPath, JsonSerializer.Serialize(new
+{
+    sharedConfiguration.Document, sharedConfiguration.Placeholders, sharedConfiguration.RunAtSignIn,
+    sharedConfiguration.ImageWidth, sharedConfiguration.ImageHeight, sharedConfiguration.BackgroundColor,
+    WallpaperFit = 1
+}));
+var numericWallpaperFitRejected = false;
+try { ConfigurationFileStore.Load(configurationPath); } catch (JsonException) { numericWallpaperFitRejected = true; }
+Check(numericWallpaperFitRejected, "Numeric wallpaper fit values are rejected");
+
+File.WriteAllText(configurationPath, JsonSerializer.Serialize(new
+{
+    sharedConfiguration.Document,
+    Placeholders = new[] { new { Name = (string?)null, Label = "Label", Kind = "Environment", Argument = "PATH" } },
+    sharedConfiguration.RunAtSignIn, sharedConfiguration.ImageWidth, sharedConfiguration.ImageHeight,
+    sharedConfiguration.BackgroundColor
+}));
+var nullPlaceholderMemberRejected = false;
+try { ConfigurationFileStore.Load(configurationPath); } catch (InvalidDataException) { nullPlaceholderMemberRejected = true; }
+Check(nullPlaceholderMemberRejected, "Null placeholder members are rejected safely");
+
+var malformedColorRejected = false;
+try { AppLimits.Validate(sharedConfiguration with { BackgroundColor = "blue" }); }
+catch (InvalidDataException) { malformedColorRejected = true; }
+Check(malformedColorRejected, "Wallpaper colors outside #RRGGBB format are rejected");
+
 ConfigurationFileStore.SaveShared(configurationPath, sharedConfiguration);
 Check(!ConfigurationFileStore.Load(configurationPath).RunAtSignIn, "A portable or machine configuration excludes per-user startup policy");
 
@@ -242,38 +278,6 @@ var oversizedConfigurationRejected = false;
 try { ConfigurationFileStore.Load(configurationPath); } catch (InvalidDataException) { oversizedConfigurationRejected = true; }
 Check(oversizedConfigurationRejected, "Oversized shared configuration is rejected before parsing");
 Directory.Delete(configurationDirectory, true);
-
-var migrationId = Guid.NewGuid().ToString("N");
-var migrationKeyPath = $@"Software\BGInfoPlus.Tests.{migrationId}";
-var migrationRunPath = $@"Software\BGInfoPlus.Tests.Run.{migrationId}";
-var migrationFile = Path.Combine(Path.GetTempPath(), "BGInfoPlus.MigrationTests", migrationId, "config.json");
-try
-{
-    using (var key = Registry.CurrentUser.CreateSubKey(migrationKeyPath))
-    {
-        key.SetValue("Document", sharedConfiguration.Document);
-        key.SetValue("Placeholders", JsonSerializer.Serialize(sharedConfiguration.Placeholders));
-        key.SetValue("RunAtSignIn", 0, RegistryValueKind.DWord);
-        key.SetValue("ImageWidth", sharedConfiguration.ImageWidth, RegistryValueKind.DWord);
-        key.SetValue("ImageHeight", sharedConfiguration.ImageHeight, RegistryValueKind.DWord);
-        key.SetValue("BackgroundColor", sharedConfiguration.BackgroundColor);
-    }
-    using (var run = Registry.CurrentUser.CreateSubKey(migrationRunPath)) run.SetValue("BGInfoPlus", "legacy");
-    LegacyRegistryConfiguration.TryMigrate(migrationFile, false, migrationKeyPath, migrationRunPath);
-    Check(ConfigurationFileStore.Load(migrationFile).Document == sharedConfiguration.Document,
-        "Legacy registry configuration migrates to the personal JSON format");
-    using var removedKey = Registry.CurrentUser.OpenSubKey(migrationKeyPath);
-    using var cleanedRun = Registry.CurrentUser.OpenSubKey(migrationRunPath);
-    Check(removedKey is null && cleanedRun?.GetValue("BGInfoPlus") is null,
-        "Legacy registry state is removed only after successful file migration");
-}
-finally
-{
-    Registry.CurrentUser.DeleteSubKeyTree(migrationKeyPath, false);
-    Registry.CurrentUser.DeleteSubKeyTree(migrationRunPath, false);
-    var migrationDirectory = Path.GetDirectoryName(migrationFile)!;
-    if (Directory.Exists(migrationDirectory)) Directory.Delete(migrationDirectory, true);
-}
 
 var shortcutDirectory = Path.Combine(Path.GetTempPath(), "BGInfoPlus.ShortcutTests", Guid.NewGuid().ToString("N"));
 var shortcutPath = Path.Combine(shortcutDirectory, UserStartupRegistration.ShortcutFileName);

@@ -14,8 +14,6 @@ $destinationExe = Join-Path $installDirectory 'BGInfoPlus.exe'
 Unregister-ScheduledTask -TaskName 'BGInfoPlus - Apply wallpaper at logon' -Confirm:$false -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath (Join-Path $env:ProgramData 'BGInfoPlus\config.json') -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath (Join-Path $env:ProgramData 'BGInfoPlus\config.source.sha256') -Force -ErrorAction SilentlyContinue
-Remove-Item -LiteralPath (Join-Path $env:ProgramData 'BGInfoPlus\default-config.json') -Force -ErrorAction SilentlyContinue
-Remove-Item -LiteralPath (Join-Path $env:ProgramData 'BGInfoPlus\default-config.source.sha256') -Force -ErrorAction SilentlyContinue
 
 Get-Process -Name BGInfoPlus -ErrorAction SilentlyContinue | ForEach-Object {
     try {
@@ -26,14 +24,6 @@ Get-Process -Name BGInfoPlus -ErrorAction SilentlyContinue | ForEach-Object {
 
 Remove-Item -LiteralPath (Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\BGInfoPlus.lnk') -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\BGInfoPlus' -Recurse -Force -ErrorAction SilentlyContinue
-
-# Remove legacy login entries from currently loaded user hives. Per-user JSON and wallpapers are preserved.
-Get-ChildItem -Path Registry::HKEY_USERS -ErrorAction SilentlyContinue |
-    Where-Object { $_.PSChildName -match '^S-1-5-21-.+' } |
-    ForEach-Object {
-        $runKey = Join-Path $_.PSPath 'Software\Microsoft\Windows\CurrentVersion\Run'
-        Remove-ItemProperty -LiteralPath $runKey -Name BGInfoPlus -ErrorAction SilentlyContinue
-    }
 
 # Remove only BGInfoPlus's per-user Startup shortcuts from profiles present on this machine.
 Get-CimInstance -ClassName Win32_UserProfile -ErrorAction SilentlyContinue |

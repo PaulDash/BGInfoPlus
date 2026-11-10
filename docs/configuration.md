@@ -1,6 +1,6 @@
 # Configuration model
 
-BGInfoPlus uses one JSON configuration format at every scope. Scope is determined only by the file's well-known location; there is no registry-backed configuration path.
+BGInfoPlus uses one JSON configuration format at every scope. Scope is determined only by the file's well-known location.
 
 ## Locations and precedence
 
@@ -95,18 +95,12 @@ The JSON object contains:
 - `BackgroundColor`; and
 - `WallpaperFit`: `Fill`, `Fit`, or `Stretch`.
 
-The editor initially selects **Current** output resolution even when a saved configuration used another size. The adjacent label shows the familiar image proportion, such as `16:9`. Importing a configuration explicitly selects its saved resolution. New and exported configurations store the selected wallpaper fit mode; older files without `WallpaperFit` remain compatible and use `Fill`.
+The editor initially selects **Current** output resolution even when a saved configuration used another size. The adjacent label shows the familiar image proportion, such as `16:9`. Importing a configuration explicitly selects its saved resolution. `WallpaperFit` is optional and defaults to `Fill` when omitted. Unknown JSON properties, numeric fit values, null placeholder members, and colors outside `#RRGGBB` format are rejected.
 
 Configuration files are limited to 4 MiB, documents to 1,048,576 characters, placeholders to 128, and rendered images to 3840 × 2160. See `AppLimits.cs` for the authoritative bounds.
-
-## Upgrade from registry-backed versions
-
-When no personal JSON file exists, BGInfoPlus checks the legacy `HKCU\Software\BGInfoPlus` values once. A valid legacy design is written to the personal JSON path, the old `HKCU` Run entry is converted to a Startup shortcut when needed, and the legacy configuration key is deleted only after those operations succeed.
-
-This compatibility read is the only application use of the old configuration registry key. New and updated configurations are file-only.
 
 ## Installation and removal
 
 The MSI installs its release `DefaultConfig.json` beside the executable and registers the machine task. Users may create personal files that override it. The Azure VM Application carries the same local fallback but installs its version default or VM `configurationReference` as enforced AllUsers scope.
 
-Installer-managed hashes allow Azure VM Application upgrades to refresh unchanged enforced policy while preserving a file an administrator modified after installation. Uninstall removes installed application files, machine policy, the machine task, legacy Run entries, and BGInfoPlus Startup shortcuts. Personal JSON files, generated wallpapers, and logs are preserved. Version 1.2.2 ignores and cleans up the obsolete `%ProgramData%\BGInfoPlus\default-config.json` path.
+Installer-managed hashes allow Azure VM Application upgrades to refresh unchanged enforced policy while preserving a file an administrator modified after installation. Uninstall removes installed application files, machine policy, the machine task, and BGInfoPlus Startup shortcuts. Personal JSON files, generated wallpapers, and logs are preserved.

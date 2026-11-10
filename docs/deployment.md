@@ -27,7 +27,7 @@ Use `win-arm64` for ARM64 Windows. WPF prevents Native AOT; native runtime compo
 Create a versioned release with:
 
 ```powershell
-./tools/Build-Release.ps1 -Version 1.2.4
+./tools/Build-Release.ps1 -Version 1.2.5
 ```
 
 The version must match `Version` in `BGInfoPlus.csproj`. The script calls `tools/Test-BGInfoPlus.ps1`, publishes the executable, generates the default configuration, builds the MSI, and creates the MSI, standalone EXE, portable ZIP, Azure VM Application ZIP, default configuration JSON, command manifest, and SHA-256 checksums under `artifacts/release/v<version>`. It recreates that version directory, so use a new version rather than storing other files there.

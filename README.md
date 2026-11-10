@@ -38,7 +38,7 @@ dotnet run --project tests/BGInfoPlus.Tests -c Release
 ## More documentation
 
 - [Installation, releases, and Azure VM Applications](docs/deployment.md)
-- [Configuration scopes, precedence, export, and migration](docs/configuration.md)
+- [Configuration scopes, precedence, and export](docs/configuration.md)
 - [Preparing a reference image](docs/reference-image.md)
 
 ## Limitations

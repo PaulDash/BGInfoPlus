@@ -35,7 +35,7 @@ Approve elevation when registering the portable task or deploying enforced polic
 
 - optionally writes the validated design to the enforced ProgramData JSON path;
 - grants ordinary users read-only access to that directory;
-- removes the preparation account's duplicate legacy Run entry or Startup shortcut; and
+- removes the preparation account's duplicate Startup shortcut; and
 - registers **BGInfoPlus - Apply wallpaper at logon** in Task Scheduler.
 
 The task uses the well-known INTERACTIVE group with limited privileges. It starts ten seconds after any interactive user logs on, so the wallpaper is changed in the correct desktop session rather than in the SYSTEM session.

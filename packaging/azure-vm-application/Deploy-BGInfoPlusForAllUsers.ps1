@@ -62,12 +62,10 @@ $allUsersPath = Join-Path $dataDirectory 'config.json'
 $configurationPath = $allUsersPath
 $managedHashPath = Join-Path $dataDirectory 'config.source.sha256'
 $applicationDefaultPath = Join-Path $installDirectory 'DefaultConfig.json'
-$legacyDefaultPath = Join-Path $dataDirectory 'default-config.json'
-$legacyDefaultHashPath = Join-Path $dataDirectory 'default-config.source.sha256'
 
 if ($Remove) {
     Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
-    foreach ($path in @($allUsersPath, $managedHashPath, $legacyDefaultPath, $legacyDefaultHashPath)) {
+    foreach ($path in @($allUsersPath, $managedHashPath)) {
         Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
     }
     Write-Host 'The BGInfoPlus machine logon deployment was removed.'
@@ -76,9 +74,6 @@ if ($Remove) {
 
 if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) { throw "BGInfoPlus was not found at $executable." }
 [IO.Directory]::CreateDirectory($dataDirectory) | Out-Null
-# Versions before 1.2.2 stored the fallback in ProgramData. It is no longer a
-# configuration source, so remove it when registering or updating deployment.
-Remove-Item -LiteralPath $legacyDefaultPath, $legacyDefaultHashPath -Force -ErrorAction SilentlyContinue
 
 if ($TemplatePath) {
     $source = [IO.Path]::GetFullPath($TemplatePath)
@@ -117,9 +112,8 @@ if ($LASTEXITCODE -ne 0) { throw 'Could not secure the BGInfoPlus machine config
 $task = New-BGInfoPlusLogonTask $executable $installDirectory
 Register-ScheduledTask -TaskName $taskName -InputObject $task -Force | Out-Null
 
-# Remove both legacy and current per-user launch points for the deploying account;
-# the machine task now owns logon execution for it.
-Remove-ItemProperty -LiteralPath 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name BGInfoPlus -ErrorAction SilentlyContinue
+# Remove the per-user launch point for the deploying account; the machine task
+# now owns logon execution for it.
 Remove-Item -LiteralPath (Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Startup\BGInfoPlus.lnk') `
     -Force -ErrorAction SilentlyContinue
 
