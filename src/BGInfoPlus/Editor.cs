@@ -24,6 +24,7 @@ internal sealed class Editor : Window
     private readonly ComboBox resolutions = new() { Width = 170, Height = 34, Margin = new Thickness(0, 0, 10, 0), VerticalContentAlignment = VerticalAlignment.Center, Padding = new Thickness(8, 0, 4, 0) };
     private readonly List<DisplayResolution> availableResolutions = [];
     private readonly List<PlaceholderDefinition> definitions = [];
+    private ConfigurationScope loadedScope = ConfigurationScope.BuiltIn;
     private readonly List<Color> recentColors = [];
     private readonly StackPanel recentFontColors = new() { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
     private readonly StackPanel recentWallpaperColors = new() { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
@@ -274,13 +275,17 @@ internal sealed class Editor : Window
         var deploy = new Button { Content = "Deploy for all users…", Height = 34, MinWidth = 156, Margin = new Thickness(8, 0, 0, 0), ToolTip = "Save this design as the machine-wide template and apply it whenever any user signs in" };
         deploy.Click += async (_, _) => await DeployForAllUsersAsync(); Grid.SetColumn(deploy, 4); bar.Children.Add(deploy);
         Grid.SetColumn(runAtSignIn, 2); Grid.SetRow(runAtSignIn, 1); bar.Children.Add(runAtSignIn);
+        var exportConfiguration = new Button { Content = "Export config…", Height = 30, MinWidth = 112, Margin = new Thickness(8, 6, 0, 0), ToolTip = "Export this editable layout and its placeholder mappings as a JSON configuration" };
+        exportConfiguration.Click += (_, _) => ExportConfiguration(); Grid.SetColumn(exportConfiguration, 3); Grid.SetRow(exportConfiguration, 1); bar.Children.Add(exportConfiguration);
+        var deployDefault = new Button { Content = "Set as default…", Height = 30, MinWidth = 156, Margin = new Thickness(8, 6, 0, 0), ToolTip = "Use this layout for users who do not have a personal configuration" };
+        deployDefault.Click += async (_, _) => await DeployMachineConfigurationAsync(ConfigurationScope.Default); Grid.SetColumn(deployDefault, 4); Grid.SetRow(deployDefault, 1); bar.Children.Add(deployDefault);
         return bar;
     }
 
     private AppConfiguration CurrentConfiguration()
     {
         var selected = resolutions.SelectedItem as DisplayResolution ?? ScreenResolution.Current;
-        var configuration = new AppConfiguration(DocumentTools.Save(editor.Document), definitions.ToArray(), runAtSignIn.IsChecked == true, selected.Width, selected.Height, ColorText(wallpaperColor));
+        var configuration = new AppConfiguration(DocumentTools.Save(editor.Document), definitions.ToArray(), runAtSignIn.IsEnabled && runAtSignIn.IsChecked == true, selected.Width, selected.Height, ColorText(wallpaperColor));
         AppLimits.Validate(configuration);
         return configuration;
     }
@@ -359,8 +364,32 @@ internal sealed class Editor : Window
 
     private async Task ApplyAsync()
     {
-        try { var configuration = CurrentConfiguration(); ConfigurationStore.Save(configuration); status.Text = "Applying wallpaper…"; await WallpaperService.ApplyAsync(configuration); status.Text = "Wallpaper applied and configuration saved to HKCU\\Software\\BGInfoPlus."; }
+        try
+        {
+            var configuration = CurrentConfiguration(); ConfigurationStore.SaveUser(configuration);
+            status.Text = "Applying wallpaper…"; await WallpaperService.ApplyAsync(configuration);
+            status.Text = loadedScope == ConfigurationScope.AllUsers
+                ? "Wallpaper applied and a personal copy was saved, but the enforced all-users configuration will be used at login. Use Deploy for all users to change it."
+                : $"Wallpaper applied and configuration saved to {ConfigurationStore.UserPath}.";
+        }
         catch (Exception e) { status.Text = "Wallpaper could not be applied: " + e.Message; }
+    }
+
+    private void ExportConfiguration()
+    {
+        try
+        {
+            var dialog = new SaveFileDialog
+            {
+                Title = "Export BGInfoPlus configuration", FileName = "BGInfoPlus-config.json",
+                DefaultExt = ".json", AddExtension = true, Filter = "BGInfoPlus configuration|*.json|All files|*.*"
+            };
+            if (dialog.ShowDialog(this) != true) return;
+            // Startup behavior is local policy, not portable layout data.
+            ConfigurationFileStore.SaveShared(dialog.FileName, CurrentConfiguration());
+            status.Text = $"Configuration exported to {dialog.FileName}";
+        }
+        catch (Exception e) { status.Text = "Configuration could not be exported: " + e.Message; }
     }
 
     private async Task ExportAsync()
@@ -392,16 +421,18 @@ internal sealed class Editor : Window
         catch (Exception e) { status.Text = "Image could not be exported: " + e.Message; }
     }
 
-    private async Task DeployForAllUsersAsync()
+    private Task DeployForAllUsersAsync() => DeployMachineConfigurationAsync(ConfigurationScope.AllUsers);
+
+    private async Task DeployMachineConfigurationAsync(ConfigurationScope targetScope)
     {
+        string? stagingPath = null;
         try
         {
             var script = System.IO.Path.Combine(AppContext.BaseDirectory, "Deploy-BGInfoPlusForAllUsers.ps1");
             if (!File.Exists(script))
                 throw new FileNotFoundException("The all-users deployment helper is not installed. Use the portable ZIP or Azure VM Application package instead of the standalone executable.", script);
-            var configuration = CurrentConfiguration() with { RunAtSignIn = false };
-            ConfigurationStore.Save(configuration);
-            runAtSignIn.IsChecked = false;
+            stagingPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"BGInfoPlus-{Guid.NewGuid():N}.json");
+            ConfigurationFileStore.SaveShared(stagingPath, CurrentConfiguration());
             var start = new ProcessStartInfo
             {
                 FileName = "powershell.exe", UseShellExecute = true, Verb = "runas",
@@ -410,40 +441,57 @@ internal sealed class Editor : Window
             start.ArgumentList.Add("-NoLogo"); start.ArgumentList.Add("-NoProfile");
             start.ArgumentList.Add("-ExecutionPolicy"); start.ArgumentList.Add("Bypass");
             start.ArgumentList.Add("-File"); start.ArgumentList.Add(script);
+            start.ArgumentList.Add("-Scope"); start.ArgumentList.Add(targetScope == ConfigurationScope.Default ? "Default" : "AllUsers");
+            start.ArgumentList.Add("-TemplatePath"); start.ArgumentList.Add(stagingPath);
+            start.ArgumentList.Add("-Force");
             start.ArgumentList.Add("-PauseOnError");
-            status.Text = "Waiting for the elevated all-users deployment…";
+            status.Text = $"Waiting for the elevated {(targetScope == ConfigurationScope.Default ? "default" : "all-users")} deployment…";
             using var process = Process.Start(start) ?? throw new InvalidOperationException("The deployment helper could not be started.");
             await process.WaitForExitAsync();
             if (process.ExitCode != 0) throw new InvalidOperationException($"The deployment helper exited with code {process.ExitCode}. See its PowerShell window for details.");
-            status.Text = "Machine-wide configuration deployed. BGInfoPlus will apply it for every user at logon.";
+            runAtSignIn.IsChecked = true; runAtSignIn.IsEnabled = false;
+            runAtSignIn.Content = "Applied at login by machine task";
+            loadedScope = File.Exists(ConfigurationStore.AllUsersPath) ? ConfigurationScope.AllUsers : targetScope;
+            status.Text = targetScope == ConfigurationScope.Default && loadedScope == ConfigurationScope.AllUsers
+                ? "Default configuration saved, but the existing all-users configuration still takes precedence."
+                : targetScope == ConfigurationScope.Default
+                    ? "Default configuration deployed. Users without a personal configuration will receive it at logon."
+                    : "All-users configuration deployed. BGInfoPlus will enforce it at every user logon.";
         }
         catch (System.ComponentModel.Win32Exception e) when (e.NativeErrorCode == 1223)
         {
-            status.Text = "All-users deployment was cancelled.";
+            status.Text = "Machine configuration deployment was cancelled.";
         }
-        catch (Exception e) { status.Text = "All-users deployment failed: " + e.Message; }
+        catch (Exception e) { status.Text = "Machine configuration deployment failed: " + e.Message; }
+        finally { if (stagingPath is not null) try { File.Delete(stagingPath); } catch { } }
     }
 
     private void LoadConfiguration()
     {
         try
         {
-            var configuration = ConfigurationStore.Load();
-            if (configuration is null)
-            {
-                editor.Document = DocumentTools.NewDocument();
-                definitions.AddRange(new[] { new PlaceholderDefinition("Hostname", "Hostname", "Networking", "Hostname"), new PlaceholderDefinition("IPv4", "IPv4 addresses", "Networking", "IPv4") });
-            }
-            else
-            {
-                editor.Document = DocumentTools.Load(configuration.Document); definitions.AddRange(configuration.Placeholders); runAtSignIn.IsChecked = configuration.RunAtSignIn;
-                wallpaperColor = ParseColor(configuration.BackgroundColor, wallpaperColor);
-                var saved = availableResolutions.FirstOrDefault(r => r.Width == configuration.ImageWidth && r.Height == configuration.ImageHeight);
-                if (saved is null) { saved = new DisplayResolution(configuration.ImageWidth, configuration.ImageHeight, "Saved"); availableResolutions.Add(saved); resolutions.Items.Refresh(); }
-                resolutions.SelectedItem = saved;
-            }
+            var resolved = ConfigurationStore.LoadForEditor();
+            loadedScope = resolved.Scope;
+            var configuration = resolved.Configuration;
+            editor.Document = DocumentTools.Load(configuration.Document); definitions.AddRange(configuration.Placeholders);
+            var machineLogon = resolved.Scope is ConfigurationScope.AllUsers or ConfigurationScope.Default;
+            runAtSignIn.IsChecked = machineLogon || configuration.RunAtSignIn;
+            runAtSignIn.IsEnabled = !machineLogon;
+            runAtSignIn.Content = machineLogon ? "Applied at login by machine task" : "Always apply at login";
+            runAtSignIn.ToolTip = machineLogon ? "The installed machine task applies the effective configuration for every interactive user." : null;
+            wallpaperColor = ParseColor(configuration.BackgroundColor, wallpaperColor);
+            var saved = availableResolutions.FirstOrDefault(r => r.Width == configuration.ImageWidth && r.Height == configuration.ImageHeight);
+            if (saved is null) { saved = new DisplayResolution(configuration.ImageWidth, configuration.ImageHeight, "Saved"); availableResolutions.Add(saved); resolutions.Items.Refresh(); }
+            resolutions.SelectedItem = saved;
             editor.Background = new SolidColorBrush(wallpaperColor); wallpaperColorSwatch.Background = new SolidColorBrush(wallpaperColor); UpdateEditorContrast();
-            RefreshPlaceholderList(); status.Text = "Edit the layout, insert placeholders, then Preview or Apply.";
+            RefreshPlaceholderList();
+            status.Text = resolved.Scope switch
+            {
+                ConfigurationScope.User => $"Loaded your configuration from {resolved.Path}.",
+                ConfigurationScope.AllUsers => $"Loaded the enforced all-users configuration from {resolved.Path}.",
+                ConfigurationScope.Default => $"Loaded the machine default because you do not yet have a personal configuration.",
+                _ => "Using the built-in starter configuration."
+            };
         }
         catch (Exception e) { editor.Document = DocumentTools.NewDocument(); status.Text = "Configuration could not be loaded: " + e.Message; }
     }

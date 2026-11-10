@@ -12,7 +12,7 @@ C:\Program Files\BGInfoPlus\BGInfoPlus.exe
 
 Do not prepare the image from the standalone EXE because it does not include the all-users deployment helper. Do not place the portable package in a profile or temporary directory; the scheduled task must still be able to find it after Sysprep.
 
-Azure VM Application setup provides the shared default and logon task. See [Installation and Deployment](deployment.md) for configuration overrides and update behavior.
+MSI setup provides the editable fallback default and logon task. Azure VM Application setup provides an enforced all-users configuration and the same task. See [Configuration model](configuration.md) and [Installation and Deployment](deployment.md) for precedence, overrides, and update behavior.
 
 ## 2. Design and test the wallpaper
 
@@ -20,17 +20,22 @@ Azure VM Application setup provides the shared default and logon task. See [Inst
 2. Open BGInfoPlus from the Start menu.
 3. Build the layout and add the required placeholders.
 4. Select **Preview** and verify the result.
-5. Select **Apply wallpaper** once. This validates and saves the design for the preparation account.
+5. Select **Apply wallpaper** to test and save a personal working copy, or proceed directly to the appropriate machine deployment action.
 
 Avoid UserData paths or other file references inside the preparation account's profile. Use stable machine-wide paths, such as a protected location below `%ProgramData%`, if the shared layout depends on external files.
 
-## 3. Deploy the design for all users
+## 3. Deploy the machine design
 
-For a custom reference-image design, select **Deploy for all users…** and approve the elevation prompt. This replaces the shared template and ensures the all-users task is registered. On a new Azure VM Application install, the release default template and task are provisioned automatically. The deployment helper:
+Choose the desired behavior before generalizing the image:
 
-- exports the validated design to `%ProgramData%\BGInfoPlus\config.json`;
+- Select **Set as default…** if new users should start with the design but may later create their own personal configuration.
+- Select **Deploy for all users…** if the design must be enforced for every user. This is normally preferable for consistent student lab desktops.
+
+Approve the elevation prompt. On a new MSI install, the release fallback and task are already provisioned; on a new Azure VM Application install, its release or VM-specific configuration is already enforced. The deployment helper:
+
+- writes the validated design to the appropriate ProgramData JSON path;
 - grants ordinary users read-only access to that directory;
-- removes the preparation account's duplicate `HKCU` automatic-start entry; and
+- removes the preparation account's duplicate legacy Run entry or Startup shortcut; and
 - registers **BGInfoPlus - Apply wallpaper at logon** in Task Scheduler.
 
 The task uses the well-known INTERACTIVE group with limited privileges. It starts ten seconds after any interactive user logs on, so the wallpaper is changed in the correct desktop session rather than in the SYSTEM session.
@@ -53,7 +58,7 @@ Verify the deployment from an elevated PowerShell prompt:
 
 ```powershell
 Get-ScheduledTask -TaskName 'BGInfoPlus - Apply wallpaper at logon' | Get-ScheduledTaskInfo
-Get-Item "$env:ProgramData\BGInfoPlus\config.json"
+Get-ChildItem "$env:ProgramData\BGInfoPlus\*-config.json", "$env:ProgramData\BGInfoPlus\config.json" -ErrorAction SilentlyContinue
 ```
 
 For a practical validation, create or use a disposable non-administrator account, sign in, wait approximately ten seconds, and confirm that `%LOCALAPPDATA%\BGInfoPlus\wallpaper.bmp` appears and the wallpaper changes. Review `%LOCALAPPDATA%\BGInfoPlus\BGInfoPlus.log` if it does not.
@@ -78,13 +83,13 @@ Windows specializes the deployed image and completes OOBE according to your prov
 4. Placeholders are resolved for the deployed VM and signed-in user.
 5. The image is written to `%LOCALAPPDATA%\BGInfoPlus\wallpaper.bmp` and applied.
 
-The same sequence occurs for every later user. Updating `%ProgramData%\BGInfoPlus\config.json` through **Deploy for all users…** changes the template used at subsequent logons.
+The same sequence occurs for every later user. AllUsers takes precedence over a personal file; Default is used only when no personal file exists. Updating either machine scope through the editor changes the effective configuration at subsequent logons.
 
 ## Removal or reconfiguration
 
-To replace the shared design, edit it under an administrator account and select **Deploy for all users…** again. The existing task and template are replaced safely.
+To replace a machine design, edit it under an administrator account and select **Set as default…** or **Deploy for all users…** again. The existing task and selected template are replaced safely.
 
-To disable only the all-users behavior while keeping the application installed, run from an elevated PowerShell prompt:
+To remove both machine scopes and the machine logon task while keeping the application installed, run from an elevated PowerShell prompt:
 
 ```powershell
 & "$env:ProgramFiles\BGInfoPlus\Deploy-BGInfoPlusForAllUsers.ps1" -Remove

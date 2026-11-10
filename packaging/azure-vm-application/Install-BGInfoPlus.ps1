@@ -47,22 +47,9 @@ if (-not [string]::IsNullOrWhiteSpace($ConfigurationPath)) {
     if (-not (Test-Path -LiteralPath $configurationSource -PathType Leaf)) {
         throw "The supplied BGInfoPlus configuration was not found at $configurationSource."
     }
-    $sharedDirectory = Join-Path $env:ProgramData 'BGInfoPlus'
-    $sharedConfiguration = Join-Path $sharedDirectory 'config.json'
-    $managedHashPath = Join-Path $sharedDirectory 'config.source.sha256'
-    $installTemplate = -not (Test-Path -LiteralPath $sharedConfiguration -PathType Leaf)
-    if (-not $installTemplate -and (Test-Path -LiteralPath $managedHashPath -PathType Leaf)) {
-        $managedHash = (Get-Content -LiteralPath $managedHashPath -Raw).Trim()
-        $currentHash = (Get-FileHash -LiteralPath $sharedConfiguration -Algorithm SHA256).Hash
-        $installTemplate = $managedHash -match '^[A-Fa-f0-9]{64}$' -and $currentHash -eq $managedHash
-    }
-    if ($installTemplate) {
-        & $installedDeploymentScript -TemplatePath $configurationSource
-        $installedHash = (Get-FileHash -LiteralPath $sharedConfiguration -Algorithm SHA256).Hash
-        Set-Content -LiteralPath $managedHashPath -Value $installedHash -Encoding ascii
-    } else {
-        & $installedDeploymentScript -PreserveConfiguration
-    }
+    # VM Applications are machine policy: their version default or configurationReference
+    # is deployed as the enforced AllUsers scope. The helper preserves admin-modified files.
+    & $installedDeploymentScript -Scope AllUsers -TemplatePath $configurationSource
 }
 
 $shortcutPath = Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\BGInfoPlus.lnk'

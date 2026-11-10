@@ -1,0 +1,63 @@
+{
+  "Document": "PFNlY3Rpb24geG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm1pY3Jvc29mdC5jb20vd2luZngvMjAwNi94YW1sL3ByZXNlbnRhdGlvbiIgeG1sOnNwYWNlPSJwcmVzZXJ2ZSIgVGV4dEFsaWdubWVudD0iUmlnaHQiIExpbmVIZWlnaHQ9IkF1dG8iIElzSHlwaGVuYXRpb25FbmFibGVkPSJGYWxzZSIgeG1sOmxhbmc9ImVuLXVzIiBGbG93RGlyZWN0aW9uPSJMZWZ0VG9SaWdodCIgTnVtYmVyU3Vic3RpdHV0aW9uLkN1bHR1cmVTb3VyY2U9IlRleHQiIE51bWJlclN1YnN0aXR1dGlvbi5TdWJzdGl0dXRpb249IkFzQ3VsdHVyZSIgRm9udEZhbWlseT0iU2Vnb2UgVUkiIEZvbnRTdHlsZT0iTm9ybWFsIiBGb250V2VpZ2h0PSJOb3JtYWwiIEZvbnRTdHJldGNoPSJOb3JtYWwiIEZvbnRTaXplPSIyNCIgRm9yZWdyb3VuZD0iI0ZGRkZGRkZGIiBUeXBvZ3JhcGh5LlN0YW5kYXJkTGlnYXR1cmVzPSJUcnVlIiBUeXBvZ3JhcGh5LkNvbnRleHR1YWxMaWdhdHVyZXM9IlRydWUiIFR5cG9ncmFwaHkuRGlzY3JldGlvbmFyeUxpZ2F0dXJlcz0iRmFsc2UiIFR5cG9ncmFwaHkuSGlzdG9yaWNhbExpZ2F0dXJlcz0iRmFsc2UiIFR5cG9ncmFwaHkuQW5ub3RhdGlvbkFsdGVybmF0ZXM9IjAiIFR5cG9ncmFwaHkuQ29udGV4dHVhbEFsdGVybmF0ZXM9IlRydWUiIFR5cG9ncmFwaHkuSGlzdG9yaWNhbEZvcm1zPSJGYWxzZSIgVHlwb2dyYXBoeS5LZXJuaW5nPSJUcnVlIiBUeXBvZ3JhcGh5LkNhcGl0YWxTcGFjaW5nPSJGYWxzZSIgVHlwb2dyYXBoeS5DYXNlU2Vuc2l0aXZlRm9ybXM9IkZhbHNlIiBUeXBvZ3JhcGh5LlN0eWxpc3RpY1NldDE9IkZhbHNlIiBUeXBvZ3JhcGh5LlN0eWxpc3RpY1NldDI9IkZhbHNlIiBUeXBvZ3JhcGh5LlN0eWxpc3RpY1NldDM9IkZhbHNlIiBUeXBvZ3JhcGh5LlN0eWxpc3RpY1NldDQ9IkZhbHNlIiBUeXBvZ3JhcGh5LlN0eWxpc3RpY1NldDU9IkZhbHNlIiBUeXBvZ3JhcGh5LlN0eWxpc3RpY1NldDY9IkZhbHNlIiBUeXBvZ3JhcGh5LlN0eWxpc3RpY1NldDc9IkZhbHNlIiBUeXBvZ3JhcGh5LlN0eWxpc3RpY1NldDg9IkZhbHNlIiBUeXBvZ3JhcGh5LlN0eWxpc3RpY1NldDk9IkZhbHNlIiBUeXBvZ3JhcGh5LlN0eWxpc3RpY1NldDEwPSJGYWxzZSIgVHlwb2dyYXBoeS5TdHlsaXN0aWNTZXQxMT0iRmFsc2UiIFR5cG9ncmFwaHkuU3R5bGlzdGljU2V0MTI9IkZhbHNlIiBUeXBvZ3JhcGh5LlN0eWxpc3RpY1NldDEzPSJGYWxzZSIgVHlwb2dyYXBoeS5TdHlsaXN0aWNTZXQxND0iRmFsc2UiIFR5cG9ncmFwaHkuU3R5bGlzdGljU2V0MTU9IkZhbHNlIiBUeXBvZ3JhcGh5LlN0eWxpc3RpY1NldDE2PSJGYWxzZSIgVHlwb2dyYXBoeS5TdHlsaXN0aWNTZXQxNz0iRmFsc2UiIFR5cG9ncmFwaHkuU3R5bGlzdGljU2V0MTg9IkZhbHNlIiBUeXBvZ3JhcGh5LlN0eWxpc3RpY1NldDE5PSJGYWxzZSIgVHlwb2dyYXBoeS5TdHlsaXN0aWNTZXQyMD0iRmFsc2UiIFR5cG9ncmFwaHkuRnJhY3Rpb249Ik5vcm1hbCIgVHlwb2dyYXBoeS5TbGFzaGVkWmVybz0iRmFsc2UiIFR5cG9ncmFwaHkuTWF0aGVtYXRpY2FsR3JlZWs9IkZhbHNlIiBUeXBvZ3JhcGh5LkVhc3RBc2lhbkV4cGVydEZvcm1zPSJGYWxzZSIgVHlwb2dyYXBoeS5WYXJpYW50cz0iTm9ybWFsIiBUeXBvZ3JhcGh5LkNhcGl0YWxzPSJOb3JtYWwiIFR5cG9ncmFwaHkuTnVtZXJhbFN0eWxlPSJOb3JtYWwiIFR5cG9ncmFwaHkuTnVtZXJhbEFsaWdubWVudD0iTm9ybWFsIiBUeXBvZ3JhcGh5LkVhc3RBc2lhbldpZHRocz0iTm9ybWFsIiBUeXBvZ3JhcGh5LkVhc3RBc2lhbkxhbmd1YWdlPSJOb3JtYWwiIFR5cG9ncmFwaHkuU3RhbmRhcmRTd2FzaGVzPSIwIiBUeXBvZ3JhcGh5LkNvbnRleHR1YWxTd2FzaGVzPSIwIiBUeXBvZ3JhcGh5LlN0eWxpc3RpY0FsdGVybmF0ZXM9IjAiPjxQYXJhZ3JhcGggVGV4dEFsaWdubWVudD0iTGVmdCI+PFJ1biBGb250V2VpZ2h0PSJTZW1pQm9sZCI+PC9SdW4+PC9QYXJhZ3JhcGg+PFBhcmFncmFwaCBUZXh0QWxpZ25tZW50PSJMZWZ0Ij48UnVuIEZvbnRXZWlnaHQ9IlNlbWlCb2xkIiBGb250U2l6ZT0iMjAiIEZvcmVncm91bmQ9IiNGRjAwMDAwMCI+PC9SdW4+PC9QYXJhZ3JhcGg+PFBhcmFncmFwaCBUZXh0QWxpZ25tZW50PSJMZWZ0Ij48UnVuIEZvbnRXZWlnaHQ9IlNlbWlCb2xkIiBGb250U2l6ZT0iMjAiIEZvcmVncm91bmQ9IiNGRjAwMDAwMCI+PC9SdW4+PC9QYXJhZ3JhcGg+PFBhcmFncmFwaCBUZXh0QWxpZ25tZW50PSJMZWZ0Ij48UnVuIEZvbnRXZWlnaHQ9IlNlbWlCb2xkIiBGb250U2l6ZT0iMzIiIEZvcmVncm91bmQ9IiNGRjAwODBGRiI+e1VTRVJET01BSU59IFwgPC9SdW4+PFJ1biBGb250V2VpZ2h0PSJTZW1pQm9sZCIgRm9udFNpemU9IjMyIj57VVNFUk5BTUV9PC9SdW4+PExpbmVCcmVhayAvPjxSdW4gRm9udFdlaWdodD0iU2VtaUJvbGQiIEZvbnRTaXplPSIzMiI+PC9SdW4+PFJ1biBGb250V2VpZ2h0PSJTZW1pQm9sZCIgRm9udFNpemU9IjY0Ij57SG9zdG5hbWV9PC9SdW4+PFJ1biBGb250V2VpZ2h0PSJTZW1pQm9sZCIgRm9udFNpemU9IjY0IiBGb3JlZ3JvdW5kPSIjRkYwMDgwRkYiPi57VXNlckRhdGF1c2VyZGF0YV9fZG9tYWluRlFETn08L1J1bj48TGluZUJyZWFrIC8+PC9QYXJhZ3JhcGg+PFBhcmFncmFwaCBUZXh0QWxpZ25tZW50PSJMZWZ0Ij48UnVuIEZvbnRXZWlnaHQ9IlNlbWlCb2xkIiBGb250U2l6ZT0iMjAiIEZvcmVncm91bmQ9IiNGRjAwODBGRiI+Vk06ICA8L1J1bj48UnVuIEZvbnRXZWlnaHQ9IlNlbWlCb2xkIiBGb250U2l6ZT0iMjAiPntBenVyZVZtTmFtZX08L1J1bj48TGluZUJyZWFrIC8+PFJ1biBGb250V2VpZ2h0PSJTZW1pQm9sZCIgRm9udFNpemU9IjIwIiBGb3JlZ3JvdW5kPSIjRkYwMDgwRkYiPkVudjogIDwvUnVuPjxSdW4gRm9udFdlaWdodD0iU2VtaUJvbGQiIEZvbnRTaXplPSIyMCI+e1VzZXJEYXRhdXNlcmRhdGFfX2Vudk5hbWV9PC9SdW4+PExpbmVCcmVhayAvPjxSdW4gRm9udFdlaWdodD0iU2VtaUJvbGQiIEZvbnRTaXplPSIyMCIgRm9yZWdyb3VuZD0iI0ZGMDA4MEZGIj5TaXplOiA8L1J1bj48UnVuIEZvbnRXZWlnaHQ9IlNlbWlCb2xkIiBGb250U2l6ZT0iMjAiPntBenVyZVZtU2l6ZX08L1J1bj48TGluZUJyZWFrIC8+PFJ1biBGb250V2VpZ2h0PSJTZW1pQm9sZCIgRm9udFNpemU9IjIwIiBGb3JlZ3JvdW5kPSIjRkYwMDgwRkYiPkxvYzogIDwvUnVuPjxSdW4gRm9udFdlaWdodD0iU2VtaUJvbGQiIEZvbnRTaXplPSIyMCI+e0F6dXJlUmVnaW9ufTwvUnVuPjxMaW5lQnJlYWsgLz48UnVuIEZvbnRTaXplPSIyMCIgRm9yZWdyb3VuZD0iI0ZGMDA4MEZGIj5JUHY0OiA8L1J1bj48UnVuIEZvbnRXZWlnaHQ9IlNlbWlCb2xkIiBGb250U2l6ZT0iMjAiPntJUHY0fTwvUnVuPjwvUGFyYWdyYXBoPjwvU2VjdGlvbj4=",
+  "Placeholders": [
+    {
+      "Name": "Hostname",
+      "Label": "Hostname",
+      "Kind": "Networking",
+      "Argument": "Hostname"
+    },
+    {
+      "Name": "IPv4",
+      "Label": "IPv4 addresses",
+      "Kind": "Networking",
+      "Argument": "IPv4"
+    },
+    {
+      "Name": "AzureVmName",
+      "Label": "Azure VM name",
+      "Kind": "Azure",
+      "Argument": "name"
+    },
+    {
+      "Name": "AzureRegion",
+      "Label": "Azure region",
+      "Kind": "Azure",
+      "Argument": "location"
+    },
+    {
+      "Name": "AzureVmSize",
+      "Label": "Azure VM size",
+      "Kind": "Azure",
+      "Argument": "vmSize"
+    },
+    {
+      "Name": "UserDatauserdata__envName",
+      "Label": "UserData /envName",
+      "Kind": "UserData",
+      "Argument": "C:\\AzureData\\CustomData.bin|/envName"
+    },
+    {
+      "Name": "UserDatauserdata__domainFQDN",
+      "Label": "UserData /domainFQDN",
+      "Kind": "UserData",
+      "Argument": "C:\\AzureData\\CustomData.bin|/domainFQDN"
+    },
+    {
+      "Name": "USERNAME",
+      "Label": "USERNAME",
+      "Kind": "Environment",
+      "Argument": "USERNAME"
+    },
+    {
+      "Name": "USERDOMAIN",
+      "Label": "USERDOMAIN",
+      "Kind": "Environment",
+      "Argument": "USERDOMAIN"
+    }
+  ],
+  "RunAtSignIn": false,
+  "ImageWidth": 1440,
+  "ImageHeight": 900,
+  "BackgroundColor": "#004993"
+}

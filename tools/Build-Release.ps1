@@ -21,8 +21,8 @@ if (-not $releaseRoot.StartsWith($expectedParent + [IO.Path]::DirectorySeparator
 if (Test-Path -LiteralPath $releaseRoot) { Remove-Item -LiteralPath $releaseRoot -Recurse -Force }
 [IO.Directory]::CreateDirectory($releaseRoot) | Out-Null
 
-& dotnet run --project (Join-Path $repositoryRoot 'tests\BGInfoPlus.Tests\BGInfoPlus.Tests.csproj') -c Release
-if ($LASTEXITCODE -ne 0) { throw 'Release tests failed.' }
+& (Join-Path $PSScriptRoot 'Test-BGInfoPlus.ps1') -Configuration Release
+if ($LASTEXITCODE -ne 0) { throw 'Release validation failed.' }
 
 $publishRoot = Join-Path $releaseRoot 'publish'
 & dotnet publish $projectPath -c Release -r win-x64 --self-contained true -o $publishRoot
@@ -54,7 +54,9 @@ catch {
 
 $installerProject = Join-Path $repositoryRoot 'packaging\standalone-installer\BGInfoPlus.Setup.wixproj'
 $standaloneMsi = Join-Path $releaseRoot "BGInfoPlus-$Version-win-x64.msi"
-& dotnet build $installerProject -c Release -p:ProductVersion=$Version -p:PublishDirectory=$publishRoot -p:RepositoryRoot=$repositoryRoot -p:OutputName="BGInfoPlus-$Version-win-x64" -o $releaseRoot
+& dotnet build $installerProject -c Release -p:ProductVersion=$Version -p:PublishDirectory=$publishRoot `
+    -p:RepositoryRoot=$repositoryRoot -p:DefaultConfigurationPath=$defaultConfiguration `
+    -p:OutputName="BGInfoPlus-$Version-win-x64" -o $releaseRoot
 if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $standaloneMsi -PathType Leaf)) { throw 'MSI build failed.' }
 Remove-Item -LiteralPath (Join-Path $releaseRoot "BGInfoPlus-$Version-win-x64.wixpdb") -Force -ErrorAction SilentlyContinue
 
@@ -69,7 +71,7 @@ Set-Content -LiteralPath (Join-Path $portableStage 'README.txt') -Encoding UTF8 
 BGInfoPlus $Version
 
 Run BGInfoPlus.exe to configure, preview, export, and apply the wallpaper.
-No separate .NET runtime is required. Configuration is stored for the current user.
+No separate .NET runtime is required. Personal configuration is stored in LocalAppData.
 Use "Deploy for all users" in the editor to create a protected shared template and logon task.
 Documentation: https://github.com/PaulDash/BGInfoPlus
 "@
@@ -110,6 +112,9 @@ $checksums = foreach ($file in $releaseFiles) {
     "$($hash.Hash.ToLowerInvariant())  $([IO.Path]::GetFileName($file))"
 }
 $checksums | Set-Content -LiteralPath (Join-Path $releaseRoot 'SHA256SUMS.txt') -Encoding ascii
+
+& (Join-Path $PSScriptRoot 'Test-ReleaseArtifacts.ps1') -ReleaseRoot $releaseRoot -Version $Version
+if ($LASTEXITCODE -ne 0) { throw 'Release artifact validation failed.' }
 
 Remove-Item -LiteralPath $publishRoot, $portableStage, $vmStage -Recurse -Force
 Write-Host "Release artifacts created in $releaseRoot"

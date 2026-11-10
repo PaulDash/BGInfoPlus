@@ -18,9 +18,11 @@ Install the machine-wide MSI or use the portable ZIP. The portable ZIP needs no 
 2. Lay out the placeholders, change colors and formatting.
 3. Choose an output resolution, then select **Preview**, **Export image**, or **Apply wallpaper**.
 
+Use **Export config…** to save a reusable JSON layout. **Set as default…** provides a fallback for users without a personal file; **Deploy for all users…** enforces the current design for every interactive user.
+
 **Always apply at login** regenerates the current user's wallpaper at sign-in.
 
-For shared systems, **Deploy for all users…** saves a protected machine-wide template and registers a delayed interactive logon task. Azure VM Application installation provisions its default template and task automatically.
+All scopes use the same validated JSON format. Personal configuration is stored under `%LOCALAPPDATA%`; protected default and all-users files are stored under `%ProgramData%`. MSI installation provisions the fallback default and logon task automatically. Azure VM Application installation provisions its supplied configuration as enforced all-users policy.
 
 ## Build and Test
 
@@ -31,11 +33,12 @@ dotnet build src/BGInfoPlus -c Release
 dotnet run --project tests/BGInfoPlus.Tests -c Release
 ```
 
-The test executable covers bounded UserData parsing, formatted placeholder behavior, configuration validation, Tab round-tripping, font-size bounds, recent colors, rendering, and atomic writes. Machine-specific Azure, registry, networking, and desktop behavior remains integration-tested.
+`tools/Test-BGInfoPlus.ps1` is the repeatable pre-release check used by the release builder. It parses maintained PowerShell scripts, validates installer XML, and runs the compiled tests. The test executable covers bounded UserData parsing, configuration precedence and validation, formatted placeholder behavior, Tab round-tripping, font-size bounds, recent colors, rendering, and atomic writes. Machine-specific Azure, networking, Task Scheduler, and desktop behavior remains integration-tested.
 
 ## More documentation
 
 - [Installation, releases, and Azure VM Applications](docs/deployment.md)
+- [Configuration scopes, precedence, export, and migration](docs/configuration.md)
 - [Preparing a reference image](docs/reference-image.md)
 
 ## Limitations

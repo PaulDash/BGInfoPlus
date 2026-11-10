@@ -15,9 +15,8 @@ internal static class Program
             {
                 if (exportIndex + 1 >= args.Length || string.IsNullOrWhiteSpace(args[exportIndex + 1]))
                     throw new ArgumentException("--export-config requires a destination path.");
-                var configuration = ConfigurationStore.Load()
-                    ?? throw new InvalidOperationException("Apply the wallpaper once before deploying it for all users.");
-                ConfigurationFileStore.Save(args[exportIndex + 1], configuration);
+                var configuration = ConfigurationStore.LoadForEditor().Configuration;
+                ConfigurationFileStore.SaveShared(args[exportIndex + 1], configuration);
                 return 0;
             }
             catch (Exception exception)
@@ -33,7 +32,7 @@ internal static class Program
             {
                 if (defaultExportIndex + 1 >= args.Length || string.IsNullOrWhiteSpace(args[defaultExportIndex + 1]))
                     throw new ArgumentException("--export-default-config requires a destination path.");
-                ConfigurationFileStore.Save(args[defaultExportIndex + 1], ConfigurationFileStore.CreateDefault());
+                ConfigurationFileStore.SaveShared(args[defaultExportIndex + 1], ConfigurationFileStore.CreateDefault());
                 return 0;
             }
             catch (Exception exception)
@@ -50,7 +49,7 @@ internal static class Program
                 if (installConfigIndex + 2 >= args.Length || string.IsNullOrWhiteSpace(args[installConfigIndex + 1]) ||
                     string.IsNullOrWhiteSpace(args[installConfigIndex + 2]))
                     throw new ArgumentException("--install-config requires a source and destination path.");
-                ConfigurationFileStore.Save(args[installConfigIndex + 2],
+                ConfigurationFileStore.SaveShared(args[installConfigIndex + 2],
                     ConfigurationFileStore.Load(args[installConfigIndex + 1]));
                 return 0;
             }
@@ -65,12 +64,14 @@ internal static class Program
             try
             {
                 var configIndex = Array.FindIndex(args, a => a.Equals("--config", StringComparison.OrdinalIgnoreCase));
-                var configuration = configIndex >= 0
-                    ? ConfigurationFileStore.Load(configIndex + 1 < args.Length
-                        ? args[configIndex + 1]
-                        : throw new ArgumentException("--config requires a file path."))
-                    : ConfigurationStore.Load();
-                if (configuration is not null) WallpaperService.Apply(configuration);
+                var resolved = configIndex >= 0
+                    ? new ResolvedConfiguration(
+                        ConfigurationFileStore.Load(configIndex + 1 < args.Length
+                            ? args[configIndex + 1]
+                            : throw new ArgumentException("--config requires a file path.")),
+                        ConfigurationScope.Explicit, args[configIndex + 1])
+                    : ConfigurationStore.LoadForAutomaticApply();
+                if (resolved is not null) WallpaperService.Apply(resolved.Configuration);
             }
             catch (Exception exception)
             {

@@ -11,6 +11,8 @@ internal sealed record DisplayResolution(int Width, int Height, string? Descript
     public override string ToString() => $"{Width} × {Height}" + (Description is null ? "" : $"  {Description}");
 }
 internal sealed record AppConfiguration(string Document, PlaceholderDefinition[] Placeholders, bool RunAtSignIn, int ImageWidth, int ImageHeight, string BackgroundColor);
+internal enum ConfigurationScope { BuiltIn, Default, User, AllUsers, Explicit }
+internal sealed record ResolvedConfiguration(AppConfiguration Configuration, ConfigurationScope Scope, string? Path);
 
 internal static class ScreenResolution
 {
@@ -29,44 +31,40 @@ internal static class ScreenResolution
 
 internal static class ConfigurationStore
 {
-    private const string KeyPath = @"Software\BGInfoPlus";
-    private const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
+    public static string UserPath => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "BGInfoPlus", "config.json");
+    public static string AllUsersPath => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "BGInfoPlus", "config.json");
+    public static string DefaultPath => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "BGInfoPlus", "default-config.json");
 
-    public static AppConfiguration? Load()
+    // Both UI and automatic paths show/use the same effective design: enforced all-users
+    // policy first, then the user's file, then the machine fallback for unconfigured users.
+    public static ResolvedConfiguration LoadForEditor()
     {
-        using var key = Registry.CurrentUser.OpenSubKey(KeyPath);
-        var document = key?.GetValue("Document") as string;
-        if (string.IsNullOrWhiteSpace(document)) return null;
-        var placeholderJson = key?.GetValue("Placeholders") as string ?? "[]";
-        if (placeholderJson.Length > AppLimits.MaxPlaceholderJsonCharacters)
-            throw new InvalidDataException("The placeholder configuration is too large.");
-        var placeholders = JsonSerializer.Deserialize<PlaceholderDefinition[]>(placeholderJson) ?? [];
-        var current = ScreenResolution.Current;
-        var width = key?.GetValue("ImageWidth") is int savedWidth ? savedWidth : current.Width;
-        var height = key?.GetValue("ImageHeight") is int savedHeight ? savedHeight : current.Height;
-        var background = key?.GetValue("BackgroundColor") as string ?? "#0F172A";
-        var configuration = new AppConfiguration(document, placeholders, (key?.GetValue("RunAtSignIn") as int? ?? 0) != 0,
-            width, height, background);
-        AppLimits.Validate(configuration);
-        return configuration;
+        MigrateLegacyRegistryConfiguration();
+        return ConfigurationResolver.ResolveForEditor(UserPath, AllUsersPath, DefaultPath)
+            ?? new ResolvedConfiguration(ConfigurationFileStore.CreateDefault(), ConfigurationScope.BuiltIn, null);
     }
 
-    public static void Save(AppConfiguration configuration)
+    public static ResolvedConfiguration? LoadForAutomaticApply()
     {
-        AppLimits.Validate(configuration);
-        using (var key = Registry.CurrentUser.CreateSubKey(KeyPath))
-        {
-            key.SetValue("Placeholders", JsonSerializer.Serialize(configuration.Placeholders), RegistryValueKind.String);
-            key.SetValue("RunAtSignIn", configuration.RunAtSignIn ? 1 : 0, RegistryValueKind.DWord);
-            key.SetValue("ImageWidth", configuration.ImageWidth, RegistryValueKind.DWord);
-            key.SetValue("ImageHeight", configuration.ImageHeight, RegistryValueKind.DWord);
-            key.SetValue("BackgroundColor", configuration.BackgroundColor, RegistryValueKind.String);
-            // Write the document last; its presence is the configuration commit marker.
-            key.SetValue("Document", configuration.Document, RegistryValueKind.String);
-        }
-        using var run = Registry.CurrentUser.CreateSubKey(RunKeyPath);
-        if (configuration.RunAtSignIn) run.SetValue("BGInfoPlus", $"\"{Environment.ProcessPath}\" --apply", RegistryValueKind.String);
-        else run.DeleteValue("BGInfoPlus", false);
+        MigrateLegacyRegistryConfiguration();
+        return ConfigurationResolver.ResolveForAutomaticApply(UserPath, AllUsersPath, DefaultPath);
+    }
+
+    public static void SaveUser(AppConfiguration configuration)
+    {
+        ConfigurationFileStore.Save(UserPath, configuration);
+        UserStartupRegistration.SetEnabled(configuration.RunAtSignIn);
+    }
+
+    public static bool HasMachineLogonConfiguration => File.Exists(AllUsersPath) || File.Exists(DefaultPath);
+
+    private static void MigrateLegacyRegistryConfiguration()
+    {
+        if (File.Exists(UserPath)) return;
+        LegacyRegistryConfiguration.TryMigrate(UserPath, !HasMachineLogonConfiguration);
     }
 }
 
@@ -86,26 +84,135 @@ internal static class ConfigurationFileStore
     {
         var fullPath = Path.GetFullPath(path);
         var info = new FileInfo(fullPath);
-        if (!info.Exists) throw new FileNotFoundException("The shared BGInfoPlus configuration was not found.", fullPath);
+        if (!info.Exists) throw new FileNotFoundException("The BGInfoPlus configuration was not found.", fullPath);
         if (info.Length > AppLimits.MaxConfigurationFileBytes)
-            throw new InvalidDataException("The shared BGInfoPlus configuration is too large.");
+            throw new InvalidDataException("The BGInfoPlus configuration is too large.");
         using var stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read,
             64 * 1024, FileOptions.SequentialScan);
         var configuration = JsonSerializer.Deserialize<AppConfiguration>(stream, JsonOptions)
-            ?? throw new InvalidDataException("The shared BGInfoPlus configuration is empty.");
+            ?? throw new InvalidDataException("The BGInfoPlus configuration is empty.");
         AppLimits.Validate(configuration);
         return configuration;
     }
 
     public static void Save(string path, AppConfiguration configuration)
     {
-        configuration = configuration with { RunAtSignIn = false };
         AppLimits.Validate(configuration);
         AtomicFile.Write(path, stream =>
         {
             JsonSerializer.Serialize(stream, configuration, JsonOptions);
             if (stream.Length > AppLimits.MaxConfigurationFileBytes)
-                throw new InvalidDataException("The shared BGInfoPlus configuration is too large.");
+                throw new InvalidDataException("The BGInfoPlus configuration is too large.");
         });
+    }
+
+    public static void SaveShared(string path, AppConfiguration configuration) =>
+        Save(path, configuration with { RunAtSignIn = false });
+}
+
+internal static class ConfigurationResolver
+{
+    public static ResolvedConfiguration? ResolveForEditor(string userPath, string allUsersPath, string defaultPath) =>
+        LoadFirst((allUsersPath, ConfigurationScope.AllUsers), (userPath, ConfigurationScope.User),
+            (defaultPath, ConfigurationScope.Default));
+
+    public static ResolvedConfiguration? ResolveForAutomaticApply(string userPath, string allUsersPath, string defaultPath) =>
+        LoadFirst((allUsersPath, ConfigurationScope.AllUsers), (userPath, ConfigurationScope.User),
+            (defaultPath, ConfigurationScope.Default));
+
+    private static ResolvedConfiguration? LoadFirst(params (string Path, ConfigurationScope Scope)[] candidates)
+    {
+        foreach (var candidate in candidates)
+        {
+            if (!File.Exists(candidate.Path)) continue;
+            // Do not silently fall through when a higher-precedence file is invalid. That
+            // could bypass an administrator's all-users policy with a private user file.
+            return new ResolvedConfiguration(ConfigurationFileStore.Load(candidate.Path), candidate.Scope, candidate.Path);
+        }
+        return null;
+    }
+}
+
+internal static class UserStartupRegistration
+{
+    internal const string ShortcutFileName = "BGInfoPlus.lnk";
+    public static string ShortcutPath => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.Startup), ShortcutFileName);
+
+    public static void SetEnabled(bool enabled)
+    {
+        var shortcutPath = ShortcutPath;
+        if (!enabled)
+        {
+            File.Delete(shortcutPath);
+            return;
+        }
+
+        var executable = Environment.ProcessPath ?? throw new InvalidOperationException("The BGInfoPlus executable path is unavailable.");
+        Directory.CreateDirectory(Path.GetDirectoryName(shortcutPath)!);
+        CreateShortcut(shortcutPath, executable);
+    }
+
+    internal static void CreateShortcut(string shortcutPath, string executable)
+    {
+        shortcutPath = Path.GetFullPath(shortcutPath);
+        executable = Path.GetFullPath(executable);
+        Directory.CreateDirectory(Path.GetDirectoryName(shortcutPath)!);
+        var shellType = Type.GetTypeFromProgID("WScript.Shell")
+            ?? throw new PlatformNotSupportedException("Windows Script Host is unavailable.");
+        dynamic? shell = null;
+        dynamic? shortcut = null;
+        try
+        {
+            shell = Activator.CreateInstance(shellType) ?? throw new InvalidOperationException("Windows Script Host could not be started.");
+            shortcut = shell.CreateShortcut(shortcutPath);
+            shortcut.TargetPath = executable;
+            shortcut.Arguments = "--apply";
+            shortcut.WorkingDirectory = Path.GetDirectoryName(executable)!;
+            shortcut.IconLocation = executable + ",0";
+            shortcut.Description = "Apply the BGInfoPlus wallpaper for the current user";
+            shortcut.Save();
+        }
+        finally
+        {
+            if (shortcut is not null && Marshal.IsComObject(shortcut)) Marshal.FinalReleaseComObject(shortcut);
+            if (shell is not null && Marshal.IsComObject(shell)) Marshal.FinalReleaseComObject(shell);
+        }
+    }
+}
+
+internal static class LegacyRegistryConfiguration
+{
+    private const string KeyPath = @"Software\BGInfoPlus";
+    private const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
+
+    public static void TryMigrate(string userPath, bool createStartupShortcut)
+        => TryMigrate(userPath, createStartupShortcut, KeyPath, RunKeyPath);
+
+    internal static void TryMigrate(string userPath, bool createStartupShortcut, string keyPath, string runKeyPath)
+    {
+        AppConfiguration? configuration;
+        using (var key = Registry.CurrentUser.OpenSubKey(keyPath))
+        {
+            var document = key?.GetValue("Document") as string;
+            if (string.IsNullOrWhiteSpace(document)) return;
+            var placeholderJson = key?.GetValue("Placeholders") as string ?? "[]";
+            if (placeholderJson.Length > AppLimits.MaxPlaceholderJsonCharacters)
+                throw new InvalidDataException("The legacy placeholder configuration is too large.");
+            var placeholders = JsonSerializer.Deserialize<PlaceholderDefinition[]>(placeholderJson) ?? [];
+            var current = ScreenResolution.Current;
+            configuration = new AppConfiguration(document, placeholders,
+                (key?.GetValue("RunAtSignIn") as int? ?? 0) != 0,
+                key?.GetValue("ImageWidth") is int width ? width : current.Width,
+                key?.GetValue("ImageHeight") is int height ? height : current.Height,
+                key?.GetValue("BackgroundColor") as string ?? "#0F172A");
+        }
+        AppLimits.Validate(configuration);
+
+        // Save and establish the replacement startup mechanism before deleting the old data.
+        ConfigurationFileStore.Save(userPath, configuration);
+        UserStartupRegistration.SetEnabled(createStartupShortcut && configuration.RunAtSignIn);
+        using (var run = Registry.CurrentUser.OpenSubKey(runKeyPath, writable: true)) run?.DeleteValue("BGInfoPlus", false);
+        Registry.CurrentUser.DeleteSubKeyTree(keyPath, throwOnMissingSubKey: false);
     }
 }

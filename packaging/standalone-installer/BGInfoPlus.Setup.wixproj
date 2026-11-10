@@ -3,6 +3,6 @@
     <OutputType>Package</OutputType>
     <InstallerPlatform>x64</InstallerPlatform>
     <OutputName>BGInfoPlus-$(ProductVersion)-win-x64</OutputName>
-    <DefineConstants>ProductVersion=$(ProductVersion);PublishDirectory=$(PublishDirectory);RepositoryRoot=$(RepositoryRoot)</DefineConstants>
+    <DefineConstants>ProductVersion=$(ProductVersion);PublishDirectory=$(PublishDirectory);RepositoryRoot=$(RepositoryRoot);DefaultConfigurationPath=$(DefaultConfigurationPath)</DefineConstants>
   </PropertyGroup>
 </Project>

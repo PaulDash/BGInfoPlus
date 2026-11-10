@@ -2,17 +2,17 @@
 
 ## Install
 
-BGInfoPlus is distributed as a machine-wide MSI, a portable ZIP, and a standalone EXE. The MSI installs to `%ProgramFiles%\BGInfoPlus`, adds a Start Menu shortcut, and supports Windows Installer upgrade and removal. It requires elevation. The portable ZIP needs no installation or separate .NET runtime; it includes the helper required by **Deploy for all users…**. The standalone EXE does not include that helper.
+BGInfoPlus is distributed as a machine-wide MSI, a portable ZIP, and a standalone EXE. The MSI installs to `%ProgramFiles%\BGInfoPlus`, adds a Start Menu shortcut, and supports Windows Installer upgrade and removal. It requires elevation. The portable ZIP needs no installation or separate .NET runtime; it includes the helper required by **Set as default…** and **Deploy for all users…**. The standalone EXE does not include that helper.
 
-The editor stores the current user's design under `HKCU\Software\BGInfoPlus`. **Always apply at login** is opt-in; selecting it and applying the design registers the current executable in the user's Windows `Run` key. At sign-in, BGInfoPlus refreshes the wallpaper without opening the editor. Clear the option and apply again to remove the entry.
+The editor stores the current user's design at `%LOCALAPPDATA%\BGInfoPlus\config.json`. **Always apply at login** is opt-in; selecting it and applying creates a shortcut in the user's Windows Startup folder. At sign-in, BGInfoPlus refreshes the wallpaper without opening the editor. Clear the option and apply again to remove the shortcut.
 
-For shared systems, **Deploy for all users…** writes a protected template to `%ProgramData%\BGInfoPlus\config.json` and registers a delayed Task Scheduler task for interactive logons. Each user gets a separately rendered wallpaper under `%LOCALAPPDATA%`.
+The MSI installs `%ProgramData%\BGInfoPlus\default-config.json` and registers a delayed Task Scheduler task. This provides an immediate fallback for users without a personal file while still allowing personal customization. **Set as default…** updates that fallback. **Deploy for all users…** writes enforced `%ProgramData%\BGInfoPlus\config.json`; it takes precedence over personal and default files. Each user still gets a separately rendered wallpaper under `%LOCALAPPDATA%`. See [Configuration model](configuration.md).
 
 For reference image preparation, follow [Preparing a reference image](reference-image.md).
 
 ## Uninstall
 
-MSI removal deletes the shared task and template while preserving per-user configurations and wallpapers.
+MSI removal deletes the machine task and machine templates while preserving per-user JSON, wallpapers, and logs.
 
 ## Build and Release
 
@@ -27,16 +27,16 @@ Use `win-arm64` for ARM64 Windows. WPF prevents Native AOT; native runtime compo
 Create a versioned release with:
 
 ```powershell
-./tools/Build-Release.ps1 -Version 1.0.3
+./tools/Build-Release.ps1 -Version 1.2.0
 ```
 
-The version must match `Version` in `BGInfoPlus.csproj`. The script runs tests, publishes the executable, generates the default configuration, builds the MSI, and creates the MSI, standalone EXE, portable ZIP, Azure VM Application ZIP, default configuration JSON, command manifest, and SHA-256 checksums under `artifacts/release/v<version>`. It recreates that version directory, so use a new version rather than storing other files there. Pushing a matching version tag builds and publishes the same artifacts through `.github/workflows/release.yml`.
+The version must match `Version` in `BGInfoPlus.csproj`. The script calls `tools/Test-BGInfoPlus.ps1`, publishes the executable, generates the default configuration, builds the MSI, and creates the MSI, standalone EXE, portable ZIP, Azure VM Application ZIP, default configuration JSON, command manifest, and SHA-256 checksums under `artifacts/release/v<version>`. It recreates that version directory, so use a new version rather than storing other files there. Pushing a matching version tag builds and publishes the same artifacts through `.github/workflows/release.yml`.
 
 ## Azure VM Application
 
-Each published version has a default configuration link. On a new VM install, BGInfoPlus validates that configuration, stores it under ProgramData, secures it for ordinary-user read access, and registers the all-users logon task. A VM's `configurationReference` overrides the version default. The downloaded configuration is named `BGInfoPlus-config.json` and is passed to the installer.
+Each published version has a default configuration link. On a new VM install, BGInfoPlus validates that configuration, installs it as enforced AllUsers scope, secures it for ordinary-user read access, and registers the machine logon task. A VM's `configurationReference` overrides the version default. The downloaded configuration is named `BGInfoPlus-config.json` and is passed to the installer.
 
-On update, an unchanged app-managed template is refreshed from the supplied configuration. If an administrator has modified or redeployed the shared template, the update preserves it. To change a custom shared design, edit it and select **Deploy for all users…** again. Removal deletes the shared task and template but preserves each user's private configuration and wallpaper.
+On update, an unchanged app-managed template is refreshed from the supplied configuration. If an administrator has modified or redeployed the enforced template, the update preserves it. To change a custom design, edit it and select **Deploy for all users…** again. Removal deletes the machine task and machine templates but preserves each user's private configuration and wallpaper.
 
 Publish a release package with the interactive wizard:
 
@@ -61,8 +61,9 @@ Only one version of a given VM Application can be assigned to a VM at a time. Th
 
 ## Files and Troubleshooting
 
-- Per-user configuration: `HKCU\Software\BGInfoPlus`.
-- Shared all-users template: `%ProgramData%\BGInfoPlus\config.json`.
+- Per-user configuration: `%LOCALAPPDATA%\BGInfoPlus\config.json`.
+- Default fallback: `%ProgramData%\BGInfoPlus\default-config.json`.
+- Enforced all-users configuration: `%ProgramData%\BGInfoPlus\config.json`.
 - Generated wallpaper: `%LOCALAPPDATA%\BGInfoPlus\wallpaper.bmp`.
 - Automatic-apply log: `%LOCALAPPDATA%\BGInfoPlus\BGInfoPlus.log`.
 

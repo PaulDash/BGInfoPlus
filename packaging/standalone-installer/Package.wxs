@@ -14,7 +14,11 @@
     <CustomAction Id="RemoveSharedDeployment" Directory="System64Folder"
                   ExeCommand="powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[INSTALLFOLDER]Remove-BGInfoPlusSharedDeployment.ps1&quot;"
                   Execute="deferred" Impersonate="no" Return="check" />
+    <CustomAction Id="InstallDefaultDeployment" Directory="System64Folder"
+                  ExeCommand="powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[INSTALLFOLDER]Deploy-BGInfoPlusForAllUsers.ps1&quot; -Scope Default -TemplatePath &quot;[INSTALLFOLDER]BGInfoPlus-DefaultConfig.json&quot;"
+                  Execute="deferred" Impersonate="no" Return="check" />
     <InstallExecuteSequence>
+      <Custom Action="InstallDefaultDeployment" After="InstallFiles" Condition="NOT REMOVE~=&quot;ALL&quot;" />
       <Custom Action="RemoveSharedDeployment" Before="RemoveFiles" Condition="REMOVE=&quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE" />
     </InstallExecuteSequence>
 
@@ -38,6 +42,7 @@
         <File Id="BGInfoPlusExe" Source="$(var.PublishDirectory)\BGInfoPlus.exe" KeyPath="yes" />
         <File Id="DeployAllUsersScript" Source="$(var.RepositoryRoot)\packaging\azure-vm-application\Deploy-BGInfoPlusForAllUsers.ps1" />
         <File Id="RemoveSharedDeploymentScript" Source="$(var.RepositoryRoot)\packaging\standalone-installer\Remove-BGInfoPlusSharedDeployment.ps1" />
+        <File Id="DefaultConfiguration" Source="$(var.DefaultConfigurationPath)" Name="BGInfoPlus-DefaultConfig.json" />
       </Component>
     </ComponentGroup>
 

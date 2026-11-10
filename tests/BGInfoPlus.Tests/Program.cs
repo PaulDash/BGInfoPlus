@@ -6,6 +6,7 @@ using BGInfoPlus.Core;
 using BGInfoPlus;
 using System.Windows.Documents;
 using System.Windows.Media;
+using Microsoft.Win32;
 
 var count = 0;
 void Check(bool condition, string name) { if (!condition) throw new Exception(name); count++; }
@@ -136,7 +137,34 @@ ConfigurationFileStore.Save(configurationPath, sharedConfiguration);
 var loadedSharedConfiguration = ConfigurationFileStore.Load(configurationPath);
 Check(loadedSharedConfiguration.Document == sharedConfiguration.Document, "Shared configuration document round-trips");
 Check(loadedSharedConfiguration.Placeholders.SequenceEqual(sharedConfiguration.Placeholders), "Shared configuration placeholders round-trip");
-Check(!loadedSharedConfiguration.RunAtSignIn, "Shared configuration never enables a per-user Run entry");
+Check(loadedSharedConfiguration.RunAtSignIn, "A personal configuration preserves its login preference");
+ConfigurationFileStore.SaveShared(configurationPath, sharedConfiguration);
+Check(!ConfigurationFileStore.Load(configurationPath).RunAtSignIn, "A portable or machine configuration excludes per-user startup policy");
+
+var userConfigurationPath = Path.Combine(configurationDirectory, "user.json");
+var allUsersConfigurationPath = Path.Combine(configurationDirectory, "all-users.json");
+var defaultConfigurationPath = Path.Combine(configurationDirectory, "default.json");
+ConfigurationFileStore.Save(userConfigurationPath, sharedConfiguration with { BackgroundColor = "#111111" });
+ConfigurationFileStore.SaveShared(allUsersConfigurationPath, sharedConfiguration with { BackgroundColor = "#222222" });
+ConfigurationFileStore.SaveShared(defaultConfigurationPath, sharedConfiguration with { BackgroundColor = "#333333" });
+var editorResolution = ConfigurationResolver.ResolveForEditor(userConfigurationPath, allUsersConfigurationPath, defaultConfigurationPath);
+Check(editorResolution?.Scope == ConfigurationScope.AllUsers && editorResolution.Configuration.BackgroundColor == "#222222",
+    "Editor resolution shows the enforced configuration that automatic apply will use");
+var automaticResolution = ConfigurationResolver.ResolveForAutomaticApply(userConfigurationPath, allUsersConfigurationPath, defaultConfigurationPath);
+Check(automaticResolution?.Scope == ConfigurationScope.AllUsers && automaticResolution.Configuration.BackgroundColor == "#222222",
+    "Automatic resolution enforces the all-users configuration first");
+File.Delete(allUsersConfigurationPath);
+automaticResolution = ConfigurationResolver.ResolveForAutomaticApply(userConfigurationPath, allUsersConfigurationPath, defaultConfigurationPath);
+Check(automaticResolution?.Scope == ConfigurationScope.User, "Automatic resolution uses a personal configuration before the default");
+File.Delete(userConfigurationPath);
+automaticResolution = ConfigurationResolver.ResolveForAutomaticApply(userConfigurationPath, allUsersConfigurationPath, defaultConfigurationPath);
+Check(automaticResolution?.Scope == ConfigurationScope.Default, "Automatic resolution falls back to the machine default for a new user");
+File.WriteAllText(allUsersConfigurationPath, "{broken}");
+var invalidPolicyRejected = false;
+try { ConfigurationResolver.ResolveForAutomaticApply(userConfigurationPath, allUsersConfigurationPath, defaultConfigurationPath); }
+catch (JsonException) { invalidPolicyRejected = true; }
+Check(invalidPolicyRejected, "An invalid all-users policy is not silently bypassed by a lower-precedence file");
+File.Delete(allUsersConfigurationPath);
 File.WriteAllText(configurationPath, "{\"Document\":null,\"Placeholders\":[],\"ImageWidth\":1920,\"ImageHeight\":1080,\"BackgroundColor\":\"#000000\"}");
 var malformedConfigurationRejected = false;
 try { ConfigurationFileStore.Load(configurationPath); } catch (InvalidDataException) { malformedConfigurationRejected = true; }
@@ -147,6 +175,44 @@ var oversizedConfigurationRejected = false;
 try { ConfigurationFileStore.Load(configurationPath); } catch (InvalidDataException) { oversizedConfigurationRejected = true; }
 Check(oversizedConfigurationRejected, "Oversized shared configuration is rejected before parsing");
 Directory.Delete(configurationDirectory, true);
+
+var migrationId = Guid.NewGuid().ToString("N");
+var migrationKeyPath = $@"Software\BGInfoPlus.Tests.{migrationId}";
+var migrationRunPath = $@"Software\BGInfoPlus.Tests.Run.{migrationId}";
+var migrationFile = Path.Combine(Path.GetTempPath(), "BGInfoPlus.MigrationTests", migrationId, "config.json");
+try
+{
+    using (var key = Registry.CurrentUser.CreateSubKey(migrationKeyPath))
+    {
+        key.SetValue("Document", sharedConfiguration.Document);
+        key.SetValue("Placeholders", JsonSerializer.Serialize(sharedConfiguration.Placeholders));
+        key.SetValue("RunAtSignIn", 0, RegistryValueKind.DWord);
+        key.SetValue("ImageWidth", sharedConfiguration.ImageWidth, RegistryValueKind.DWord);
+        key.SetValue("ImageHeight", sharedConfiguration.ImageHeight, RegistryValueKind.DWord);
+        key.SetValue("BackgroundColor", sharedConfiguration.BackgroundColor);
+    }
+    using (var run = Registry.CurrentUser.CreateSubKey(migrationRunPath)) run.SetValue("BGInfoPlus", "legacy");
+    LegacyRegistryConfiguration.TryMigrate(migrationFile, false, migrationKeyPath, migrationRunPath);
+    Check(ConfigurationFileStore.Load(migrationFile).Document == sharedConfiguration.Document,
+        "Legacy registry configuration migrates to the personal JSON format");
+    using var removedKey = Registry.CurrentUser.OpenSubKey(migrationKeyPath);
+    using var cleanedRun = Registry.CurrentUser.OpenSubKey(migrationRunPath);
+    Check(removedKey is null && cleanedRun?.GetValue("BGInfoPlus") is null,
+        "Legacy registry state is removed only after successful file migration");
+}
+finally
+{
+    Registry.CurrentUser.DeleteSubKeyTree(migrationKeyPath, false);
+    Registry.CurrentUser.DeleteSubKeyTree(migrationRunPath, false);
+    var migrationDirectory = Path.GetDirectoryName(migrationFile)!;
+    if (Directory.Exists(migrationDirectory)) Directory.Delete(migrationDirectory, true);
+}
+
+var shortcutDirectory = Path.Combine(Path.GetTempPath(), "BGInfoPlus.ShortcutTests", Guid.NewGuid().ToString("N"));
+var shortcutPath = Path.Combine(shortcutDirectory, UserStartupRegistration.ShortcutFileName);
+UserStartupRegistration.CreateShortcut(shortcutPath, Environment.ProcessPath!);
+Check(File.Exists(shortcutPath) && new FileInfo(shortcutPath).Length > 0, "Per-user login shortcut can be created without registry startup state");
+Directory.Delete(shortcutDirectory, true);
 
 var atomicDirectory = Path.Combine(Path.GetTempPath(), "BGInfoPlus.Tests", Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(atomicDirectory);
